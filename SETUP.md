@@ -171,3 +171,63 @@ npm run build
   Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` in an elevated PowerShell terminal.
 * **C++ Compiler Error on Windows (`psycopg2`)**:
   FinTrack uses `psycopg` (v3 with binary wheels). Do not install `psycopg2`.
+
+---
+
+## 8. Team Git Workflow & Branch Strategy
+
+To ensure team members work in parallel without merge conflicts or accidentally breaking `main`:
+
+### A. Repository Branches
+* **`main`**: Production-ready, stable codebase. Do not commit directly to `main`.
+* **`develop`**: Central integration branch where all feature branches are merged.
+
+### B. One-Time Setup for the Team Lead
+Push the initial code and create the shared `develop` branch:
+```bash
+# Push main
+git push -u origin main
+
+# Create and push develop branch
+git checkout -b develop
+git push -u origin develop
+```
+
+### C. Developer Workflow (For Each Feature Owner)
+
+1. **Pull the latest `develop` branch before starting**:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   ```
+
+2. **Create your designated feature branch**:
+   * **Developer 1 (Transactions, CSV Pipeline & Category Admin)**:
+     ```bash
+     git checkout -b feat/transactions-csv
+     ```
+   * **Developer 2 (Budgets, Goals & Admin User Moderation)**:
+     ```bash
+     git checkout -b feat/budgets-goals
+     ```
+   * **Developer 3 (Financial Health Score, Analytics & PDF Reports)**:
+     ```bash
+     git checkout -b feat/analytics-reports
+     ```
+
+3. **Commit your changes regularly**:
+   ```bash
+   git add .
+   git commit -m "feat(transactions): add csv upload endpoint and file validator"
+   ```
+
+4. **Push your branch to GitHub**:
+   ```bash
+   git push -u origin <your-branch-name>
+   ```
+
+5. **Open a Pull Request (PR)**:
+   * On GitHub, open a **Pull Request**.
+   * Set the **base branch** to `develop` (NOT `main`).
+   * Request review from a teammate before merging.
+
