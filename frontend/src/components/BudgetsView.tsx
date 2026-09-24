@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, 
-  ChevronLeft, 
-  ChevronRight, 
+  Calendar,
   AlertTriangle, 
   CheckCircle, 
   AlertCircle, 
@@ -19,7 +18,8 @@ import {
   HeartPulse,
   Home,
   RefreshCw,
-  FolderMinus
+  FolderMinus,
+  Layers
 } from 'lucide-react';
 import { 
   getBudgets, 
@@ -32,21 +32,47 @@ import {
 import type { 
   Budget, 
   BudgetSummary, 
-  BudgetCategory 
+  BudgetCategory,
+  BudgetPeriodType
 } from '../api/budgets';
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
+const MONTH_OPTIONS = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
 ];
+
+const QUARTER_OPTIONS = [
+  { value: 1, label: 'Q1 (Jan – Mar)' },
+  { value: 2, label: 'Q2 (Apr – Jun)' },
+  { value: 3, label: 'Q3 (Jul – Sep)' },
+  { value: 4, label: 'Q4 (Oct – Dec)' },
+];
+
+const HALF_YEAR_OPTIONS = [
+  { value: 1, label: 'H1 (Jan – Jun)' },
+  { value: 2, label: 'H2 (Jul – Dec)' },
+];
+
+const MONTH_NAMES = MONTH_OPTIONS.map(m => m.label);
 
 export const BudgetsView: React.FC = () => {
   const currentDate = new Date();
-  // Default to Month 9 (September) 2026 if today is earlier or matching seed data, or current date
-  const [selectedMonth, setSelectedMonth] = useState<number>(() => {
-    // If year is 2026, default to 9 (September) so seed data immediately appears
-    return 9;
-  });
+
+  // Period View state
+  const [activePeriod, setActivePeriod] = useState<BudgetPeriodType>('monthly');
+  const [selectedMonth, setSelectedMonth] = useState<number>(9); // Default to Sept 2026 for demo data
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(3); // Q3
+  const [selectedHalf, setSelectedHalf] = useState<number>(2); // H2
   const [selectedYear, setSelectedYear] = useState<number>(2026);
 
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -64,6 +90,9 @@ export const BudgetsView: React.FC = () => {
   // Form fields
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formLimitAmount, setFormLimitAmount] = useState('');
+  const [formMonth, setFormMonth] = useState<number>(9);
+  const [formYear, setFormYear] = useState<number>(2026);
+  const [formApplyToPeriod, setFormApplyToPeriod] = useState<'single_month' | 'quarter' | 'half_year' | 'year'>('single_month');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -72,9 +101,27 @@ export const BudgetsView: React.FC = () => {
     setLoading(true);
     setErrorMsg(null);
     try {
+      const periodValue = activePeriod === 'monthly'
+        ? selectedMonth
+        : activePeriod === 'quarterly'
+          ? selectedQuarter
+          : activePeriod === 'half_yearly'
+            ? selectedHalf
+            : 1;
+
       const [budgetsData, summaryData, categoriesData] = await Promise.all([
-        getBudgets(selectedMonth, selectedYear),
-        getBudgetSummary(selectedMonth, selectedYear),
+        getBudgets({
+          period_type: activePeriod,
+          period_value: periodValue,
+          month: selectedMonth,
+          year: selectedYear
+        }),
+        getBudgetSummary({
+          period_type: activePeriod,
+          period_value: periodValue,
+          month: selectedMonth,
+          year: selectedYear
+        }),
         getBudgetCategories()
       ]);
       setBudgets(budgetsData);
@@ -86,7 +133,7 @@ export const BudgetsView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth, selectedYear]);
+  }, [activePeriod, selectedMonth, selectedQuarter, selectedHalf, selectedYear]);
 
   useEffect(() => {
     fetchData();
@@ -100,34 +147,23 @@ export const BudgetsView: React.FC = () => {
     }
   }, [successMsg]);
 
-  // Month navigation
-  const handlePrevMonth = () => {
-    if (selectedMonth === 1) {
-      setSelectedMonth(12);
-      setSelectedYear(y => y - 1);
-    } else {
-      setSelectedMonth(m => m - 1);
-    }
-  };
-
-  const handleNextMonth = () => {
-    if (selectedMonth === 12) {
-      setSelectedMonth(1);
-      setSelectedYear(y => y + 1);
-    } else {
-      setSelectedMonth(m => m + 1);
-    }
-  };
-
-  const handleResetToCurrentMonth = () => {
-    setSelectedMonth(currentDate.getMonth() + 1);
-    setSelectedYear(currentDate.getFullYear());
+  const handleResetToCurrent = () => {
+    const curMonth = currentDate.getMonth() + 1;
+    const curYear = currentDate.getFullYear();
+    setSelectedMonth(curMonth);
+    setSelectedQuarter(Math.floor((curMonth - 1) / 3) + 1);
+    setSelectedHalf(curMonth <= 6 ? 1 : 2);
+    setSelectedYear(curYear);
   };
 
   // Open create modal
   const handleOpenCreateModal = () => {
     setFormError(null);
     setFormLimitAmount('');
+    setFormMonth(selectedMonth);
+    setFormYear(selectedYear);
+    setFormApplyToPeriod('single_month');
+    
     // Auto-select first category that isn't budgeted yet
     const budgetedCatIds = new Set(budgets.map(b => b.category_id));
     const firstAvailable = categories.find(c => !budgetedCatIds.has(c.id));
@@ -153,13 +189,30 @@ export const BudgetsView: React.FC = () => {
     try {
       await createBudget({
         category_id: formCategoryId,
-        month: selectedMonth,
-        year: selectedYear,
-        limit_amount: limit
+        month: formMonth,
+        year: formYear,
+        limit_amount: limit,
+        apply_to_period: formApplyToPeriod
       });
       setIsCreateModalOpen(false);
-      setSuccessMsg('Budget created successfully!');
-      fetchData();
+      const catName = categories.find(c => c.id === formCategoryId)?.name || 'Category';
+      
+      const periodLabelStr = formApplyToPeriod === 'year' 
+        ? `all 12 months of ${formYear}` 
+        : formApplyToPeriod === 'half_year' 
+          ? `6 months of H${formMonth <= 6 ? 1 : 2} ${formYear}` 
+          : formApplyToPeriod === 'quarter' 
+            ? `Q${Math.floor((formMonth - 1) / 3) + 1} ${formYear}` 
+            : `${MONTH_NAMES[formMonth - 1]} ${formYear}`;
+
+      setSuccessMsg(`Budget for ${catName} set for ${periodLabelStr}!`);
+      
+      if (formMonth !== selectedMonth || formYear !== selectedYear) {
+        setSelectedMonth(formMonth);
+        setSelectedYear(formYear);
+      } else {
+        fetchData();
+      }
     } catch (err: any) {
       setFormError(err.response?.data?.detail || 'Failed to create budget.');
     } finally {
@@ -228,7 +281,7 @@ export const BudgetsView: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* 1. TOP HEADER & MONTH SELECTOR BAR */}
+      {/* 1. TOP HEADER & CONTROLS BAR */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -241,89 +294,174 @@ export const BudgetsView: React.FC = () => {
             Budgets & Expense Limits
           </h1>
           <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)' }}>
-            Plan category spending and track limits with live threshold warnings.
+            Plan category spending and track limits across monthly, quarterly, and yearly cycles.
           </p>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           
-          {/* Month Selector Pill */}
+          {/* Period Selector Tabs: Monthly, Quarterly, Half-Yearly, Yearly */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             backgroundColor: 'var(--card)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-pill)',
-            padding: '4px 6px',
+            borderRadius: 'var(--radius-input)',
+            padding: '3px',
             boxShadow: 'var(--shadow-sm)'
           }}>
-            <button
-              onClick={handlePrevMonth}
-              title="Previous Month"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--main-text)',
-                cursor: 'pointer',
-                padding: '6px',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            <span style={{
-              fontSize: '13.5px',
-              fontWeight: 600,
-              color: 'var(--primary)',
-              padding: '0 10px',
-              minWidth: '130px',
-              textAlign: 'center'
-            }}>
-              {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
-            </span>
-
-            <button
-              onClick={handleNextMonth}
-              title="Next Month"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--main-text)',
-                cursor: 'pointer',
-                padding: '6px',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <ChevronRight size={16} />
-            </button>
+            {[
+              { id: 'monthly', label: 'Monthly' },
+              { id: 'quarterly', label: 'Quarterly' },
+              { id: 'half_yearly', label: 'Half-Yearly' },
+              { id: 'yearly', label: 'Yearly' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActivePeriod(tab.id as BudgetPeriodType)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  backgroundColor: activePeriod === tab.id ? 'var(--primary)' : 'transparent',
+                  color: activePeriod === tab.id ? 'var(--bg)' : 'var(--secondary-text)'
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* Quick jump to Current Month button */}
-          {(selectedMonth !== currentDate.getMonth() + 1 || selectedYear !== currentDate.getFullYear()) && (
-            <button
-              onClick={handleResetToCurrentMonth}
+          {/* Context-Sensitive Period Picker Dropdown (Matching Income Page Style) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-input)',
+            padding: '2px 8px',
+            gap: '6px',
+            boxShadow: 'var(--shadow-sm)'
+          }}>
+            <Calendar size={16} color="var(--secondary-text)" />
+            
+            {/* 1. Monthly Selector */}
+            {activePeriod === 'monthly' && (
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--main-text)',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  outline: 'none',
+                  padding: '8px 4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {MONTH_OPTIONS.map((m) => (
+                  <option key={m.value} value={m.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* 2. Quarterly Selector */}
+            {activePeriod === 'quarterly' && (
+              <select
+                value={selectedQuarter}
+                onChange={(e) => setSelectedQuarter(Number(e.target.value))}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--main-text)',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  outline: 'none',
+                  padding: '8px 4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {QUARTER_OPTIONS.map((q) => (
+                  <option key={q.value} value={q.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
+                    {q.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* 3. Half-Yearly Selector */}
+            {activePeriod === 'half_yearly' && (
+              <select
+                value={selectedHalf}
+                onChange={(e) => setSelectedHalf(Number(e.target.value))}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--main-text)',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  outline: 'none',
+                  padding: '8px 4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {HALF_YEAR_OPTIONS.map((h) => (
+                  <option key={h.value} value={h.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
+                    {h.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Year Selector (Always Visible) */}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
               style={{
-                backgroundColor: 'transparent',
-                border: '1px solid var(--border)',
-                color: 'var(--secondary-text)',
-                fontSize: '12px',
-                fontWeight: 600,
-                padding: '7px 12px',
-                borderRadius: 'var(--radius-btn)',
-                cursor: 'pointer'
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--main-text)',
+                fontSize: '13px',
+                fontWeight: 500,
+                outline: 'none',
+                padding: '8px 4px',
+                cursor: 'pointer',
+                borderLeft: activePeriod !== 'yearly' ? '1px solid var(--border)' : 'none'
               }}
             >
-              Today
-            </button>
-          )}
+              {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                <option key={y} value={y} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Quick jump to Today */}
+          <button
+            onClick={handleResetToCurrent}
+            style={{
+              backgroundColor: 'transparent',
+              border: '1px solid var(--border)',
+              color: 'var(--secondary-text)',
+              fontSize: '12px',
+              fontWeight: 600,
+              padding: '7px 12px',
+              borderRadius: 'var(--radius-btn)',
+              cursor: 'pointer'
+            }}
+          >
+            Today
+          </button>
 
           {/* Set New Budget Button */}
           <button
@@ -384,6 +522,25 @@ export const BudgetsView: React.FC = () => {
       {summary && (
         <div className="card-box" style={{ padding: '24px', position: 'relative', overflow: 'hidden' }}>
           
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                backgroundColor: 'var(--card-subtle)',
+                border: '1px solid var(--border)',
+                color: 'var(--primary)'
+              }}>
+                {summary.period_label}
+              </span>
+              <span style={{ fontSize: '13px', color: 'var(--secondary-text)' }}>
+                {activePeriod.toUpperCase().replace('_', ' ')} OVERVIEW
+              </span>
+            </div>
+          </div>
+
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -392,7 +549,7 @@ export const BudgetsView: React.FC = () => {
           }}>
             <div>
               <div style={{ fontSize: '12px', color: 'var(--secondary-text)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
-                Total Monthly Budget
+                Total Allocated Budget
               </div>
               <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)' }}>
                 ₹{summary.total_budget.toLocaleString('en-IN')}
@@ -404,25 +561,25 @@ export const BudgetsView: React.FC = () => {
 
             <div>
               <div style={{ fontSize: '12px', color: 'var(--secondary-text)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
-                Total Actual Spent
+                Total Period Spending
               </div>
               <div style={{ fontSize: '24px', fontWeight: 700, color: summary.total_spent > summary.total_budget ? 'var(--danger)' : 'var(--primary)' }}>
                 ₹{summary.total_spent.toLocaleString('en-IN')}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--secondary-text)', marginTop: '4px' }}>
-                {summary.overall_percentage}% of total allocated
+                {summary.overall_percentage}% of allocated budget
               </div>
             </div>
 
             <div>
               <div style={{ fontSize: '12px', color: 'var(--secondary-text)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
-                Remaining Buffer
+                Remaining Balance
               </div>
               <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--accent)' }}>
                 ₹{summary.total_remaining.toLocaleString('en-IN')}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--secondary-text)', marginTop: '4px' }}>
-                Safe to spend this month
+                Safe buffer for this period
               </div>
             </div>
 
@@ -468,7 +625,7 @@ export const BudgetsView: React.FC = () => {
           {/* Overall Progress Bar */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
-              <span>Monthly Budget Utilization</span>
+              <span>Period Budget Utilization</span>
               <span>{summary.overall_percentage}%</span>
             </div>
             <div style={{
@@ -496,12 +653,12 @@ export const BudgetsView: React.FC = () => {
 
       {/* 3. CATEGORY BUDGETS GRID */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--primary)' }}>
             Category Breakdowns ({budgets.length})
           </h2>
           <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)' }}>
-            Threshold alert at 80% and 100%
+            Showing limits for {summary?.period_label || 'selected period'}
           </span>
         </div>
 
@@ -539,10 +696,10 @@ export const BudgetsView: React.FC = () => {
               <FolderMinus size={24} />
             </div>
             <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', marginBottom: '6px' }}>
-              No budgets set for {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+              No budgets recorded for {summary?.period_label || 'this period'}
             </h3>
-            <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', maxWidth: '400px', margin: '0 auto 20px' }}>
-              Setting monthly category budgets helps curb impulse spending and increases your monthly savings rate.
+            <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', maxWidth: '440px', margin: '0 auto 20px' }}>
+              Setting category budgets for this period helps ensure discipline and tracks spending limits over time.
             </p>
             <button
               onClick={handleOpenCreateModal}
@@ -588,7 +745,7 @@ export const BudgetsView: React.FC = () => {
 
               return (
                 <div 
-                  key={b.id} 
+                  key={b.id || b.category_id} 
                   className="card-box" 
                   style={{ 
                     padding: '20px', 
@@ -621,42 +778,50 @@ export const BudgetsView: React.FC = () => {
                             {b.category_name}
                           </div>
                           <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>
-                            Monthly Allocation
+                            {activePeriod === 'monthly' ? 'Monthly Limit' : `${b.period_label || 'Period'} Total`}
                           </div>
                         </div>
                       </div>
 
-                      {/* Edit / Delete actions */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <button
-                          onClick={() => handleOpenEditModal(b)}
-                          title="Edit Limit"
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--secondary-text)',
-                            padding: '6px',
-                            borderRadius: '6px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={() => setDeletingBudgetId(b.id)}
-                          title="Delete Budget"
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--secondary-text)',
-                            padding: '6px',
-                            borderRadius: '6px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
+                      {/* Actions (Enabled in Monthly Mode) */}
+                      {activePeriod === 'monthly' && b.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <button
+                            onClick={() => handleOpenEditModal(b)}
+                            title="Edit Limit"
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--secondary-text)',
+                              padding: '6px',
+                              borderRadius: '6px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button
+                            onClick={() => setDeletingBudgetId(b.id)}
+                            title="Delete Budget"
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--secondary-text)',
+                              padding: '6px',
+                              borderRadius: '6px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--secondary-text)', background: 'var(--card-subtle)', padding: '3px 6px', borderRadius: '4px' }}>
+                            {b.months_budgeted ? `${b.months_budgeted} mo active` : 'Aggregate'}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Spend vs Limit Figures */}
@@ -702,7 +867,7 @@ export const BudgetsView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Card Footer: Remaining text */}
+                  {/* Card Footer */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: 'var(--secondary-text)', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
                     <span>
                       {isOver ? (
@@ -713,7 +878,7 @@ export const BudgetsView: React.FC = () => {
                         <span>₹{b.remaining_amount.toLocaleString('en-IN')} remaining</span>
                       )}
                     </span>
-                    <span>{b.month}/{b.year}</span>
+                    <span>{b.period_label || `${b.month}/${b.year}`}</span>
                   </div>
 
                 </div>
@@ -723,7 +888,7 @@ export const BudgetsView: React.FC = () => {
         )}
       </div>
 
-      {/* 4. MODAL: CREATE BUDGET */}
+      {/* 4. MODAL: CREATE BUDGET (WITH FULL FREEDOM) */}
       {isCreateModalOpen && (
         <div style={{
           position: 'fixed',
@@ -737,7 +902,7 @@ export const BudgetsView: React.FC = () => {
         }}>
           <div className="card-box" style={{
             width: '100%',
-            maxWidth: '440px',
+            maxWidth: '460px',
             padding: '24px',
             borderRadius: 'var(--radius-card)',
             boxShadow: 'var(--shadow-lg)'
@@ -789,38 +954,83 @@ export const BudgetsView: React.FC = () => {
                 </select>
               </div>
 
-              {/* Month & Year Display */}
+              {/* Month & Year Selection (Full Freedom) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                    Month
+                    Target Month
                   </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={MONTH_NAMES[selectedMonth - 1]}
+                  <select
+                    value={formMonth}
+                    onChange={(e) => setFormMonth(Number(e.target.value))}
                     className="input-field"
-                    style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px', opacity: 0.8 }}
-                  />
+                    style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px', cursor: 'pointer' }}
+                  >
+                    {MONTH_OPTIONS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                    Year
+                    Target Year
                   </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={selectedYear}
+                  <select
+                    value={formYear}
+                    onChange={(e) => setFormYear(Number(e.target.value))}
                     className="input-field"
-                    style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px', opacity: 0.8 }}
-                  />
+                    style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px', cursor: 'pointer' }}
+                  >
+                    {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              {/* Limit Amount */}
+              {/* Apply Scope Option (Single Month, Quarter, Half-Year, Year) */}
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                  <Layers size={14} color="var(--accent)" /> Apply Scope
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                  {[
+                    { id: 'single_month', label: 'Single Month' },
+                    { id: 'quarter', label: 'Entire Quarter (3 mo)' },
+                    { id: 'half_year', label: 'Half-Year (6 mo)' },
+                    { id: 'year', label: 'Full Year (12 mo)' }
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setFormApplyToPeriod(opt.id as any)}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 'var(--radius-btn)',
+                        border: formApplyToPeriod === opt.id ? '2px solid var(--accent)' : '1px solid var(--border)',
+                        backgroundColor: formApplyToPeriod === opt.id ? 'var(--light-accent)' : 'var(--card-subtle)',
+                        color: formApplyToPeriod === opt.id ? 'var(--accent-hover)' : 'var(--main-text)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Monthly Limit Amount */}
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                  Monthly Limit (₹)
+                  Monthly Limit Amount (₹)
                 </label>
                 <input
                   type="number"
@@ -833,6 +1043,15 @@ export const BudgetsView: React.FC = () => {
                   required
                   style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px' }}
                 />
+                <span style={{ fontSize: '11.5px', color: 'var(--secondary-text)', marginTop: '4px', display: 'block' }}>
+                  {formApplyToPeriod === 'year' 
+                    ? `Will allocate ₹${formLimitAmount || 0}/month across all 12 months in ${formYear}` 
+                    : formApplyToPeriod === 'quarter' 
+                      ? `Will allocate ₹${formLimitAmount || 0}/month across all 3 months in Q${Math.floor((formMonth - 1) / 3) + 1}` 
+                      : formApplyToPeriod === 'half_year'
+                        ? `Will allocate ₹${formLimitAmount || 0}/month across all 6 months in H${formMonth <= 6 ? 1 : 2}`
+                        : `Allocates ₹${formLimitAmount || 0} for ${MONTH_NAMES[formMonth - 1]} ${formYear}`}
+                </span>
               </div>
 
               {/* Buttons */}

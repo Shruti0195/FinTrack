@@ -426,16 +426,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           </div>
         </header>
 
-        {/* Body Content */}
-        {activeTab === 'income' ? (
-          <IncomePage />
-        ) : (
-          <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
-          
-          {/* Welcome Banner */}
-        {/* Dashboard Body Content */}
+        {/* Main Body Content */}
         <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
-          {activeTab === 'budgets' ? (
+          {activeTab === 'income' ? (
+            <IncomePage />
+          ) : activeTab === 'budgets' ? (
             <BudgetsView />
           ) : (
             <>
@@ -713,7 +708,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             </>
           )}
         </main>
-        )}
       </div>
 
       {/* Logout Confirmation Modal */}
