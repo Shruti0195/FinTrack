@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
+import { BudgetsView } from '../components/BudgetsView';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -403,8 +404,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
 
         {/* Dashboard Body Content */}
         <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
-          
-          {/* Welcome Banner */}
+          {activeTab === 'budgets' ? (
+            <BudgetsView />
+          ) : (
+            <>
+              {/* Welcome Banner */}
           <div style={{ marginBottom: '24px' }}>
             <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px' }}>
               Good Morning, {userName.split(' ')[0]}! 👋
@@ -670,7 +674,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               </div>
             </div>
           </div>
-
+            </>
+          )}
         </main>
       </div>
 
