@@ -45,7 +45,9 @@ CREATE TABLE users (
     email                VARCHAR(255)    NOT NULL UNIQUE,
     password_hash        VARCHAR(255)    NOT NULL,          -- bcrypt hash, never plain text
     role                 user_role       NOT NULL DEFAULT 'USER',
-    is_active            BOOLEAN         NOT NULL DEFAULT TRUE,   -- admin can disable a user
+    is_active            BOOLEAN         NOT NULL DEFAULT FALSE,  -- Inactive until email is verified
+    is_verified          BOOLEAN         NOT NULL DEFAULT FALSE,  -- Verified via email token
+    email_verified_at    TIMESTAMPTZ,                             -- Timestamp when verified
     email_alerts_enabled BOOLEAN         NOT NULL DEFAULT TRUE,   -- Settings page toggle
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ     NOT NULL DEFAULT now()  -- auto-refreshed by trigger
