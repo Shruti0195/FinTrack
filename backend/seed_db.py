@@ -25,6 +25,7 @@ def seed():
                 password_hash=get_password_hash("password123"),
                 role="USER",
                 is_active=True,
+                is_verified=True,
                 email_alerts_enabled=True,
             )
             admin = User(
@@ -33,6 +34,7 @@ def seed():
                 password_hash=get_password_hash("admin123"),
                 role="ADMIN",
                 is_active=True,
+                is_verified=True,
                 email_alerts_enabled=True,
             )
             db.add_all([user, admin])
