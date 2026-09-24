@@ -16,10 +16,12 @@ import {
   Moon,
   ArrowUpRight,
   ArrowDownRight,
-  Sparkles
+  Sparkles,
+  PlusCircle
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
+import { IncomePage } from './IncomePage';
 import { BudgetsView } from '../components/BudgetsView';
 
 interface DashboardPageProps {
@@ -113,6 +115,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             >
               <LayoutDashboard size={18} />
               Dashboard
+            </button>
+
+            <button
+              onClick={() => setActiveTab('income')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-btn)',
+                border: 'none',
+                backgroundColor: activeTab === 'income' ? 'var(--light-accent)' : 'transparent',
+                color: activeTab === 'income' ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: activeTab === 'income' ? 600 : 500,
+                fontSize: '14px',
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              <PlusCircle size={18} />
+              Income
             </button>
 
             <button
@@ -402,6 +426,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           </div>
         </header>
 
+        {/* Body Content */}
+        {activeTab === 'income' ? (
+          <IncomePage />
+        ) : (
+          <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
+          
+          {/* Welcome Banner */}
         {/* Dashboard Body Content */}
         <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
           {activeTab === 'budgets' ? (
@@ -605,7 +636,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           <div className="card-box" style={{ padding: '22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
               <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)' }}>Recent Transactions</span>
-              <span style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}>View All &rarr;</span>
+              <span 
+                onClick={() => setActiveTab('income')}
+                style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}
+              >
+                View All &rarr;
+              </span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -677,6 +713,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             </>
           )}
         </main>
+        )}
       </div>
 
       {/* Logout Confirmation Modal */}

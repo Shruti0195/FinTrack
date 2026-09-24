@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import auth
+from app.api.v1.endpoints.user import settings as user_settings, income as user_income
 from app.api.v1.endpoints.user import settings as user_settings, budgets as user_budgets
 from app.api.v1.endpoints.admin import overview as admin_overview, users as admin_users
 
@@ -15,6 +16,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
 # -------------------------------------------------------------
 user_router = APIRouter(prefix="/user")
 user_router.include_router(user_settings.router, prefix="/settings", tags=["User - Settings"])
+user_router.include_router(user_income.router, prefix="/income", tags=["User - Income"])
 user_router.include_router(user_budgets.router, prefix="/budgets", tags=["User - Budgets"])
 # Future teammate endpoints attach here:
 # user_router.include_router(transactions.router, prefix="/transactions", tags=["User - Transactions"])

@@ -7,10 +7,13 @@
   --accent: #10B981;           /* Emerald Green */
   --accent-hover: #059669;
   --light-accent: #D1FAE5;     /* Mint */
-  --bg: #F8FAFC;               /* Off White */
+  --active-nav-bg: #D1FAE5;    /* Active Nav Background */
+  --bg: #F8FAFC;               /* Main Background */
   --navbar-bg: #FFFFFF;
-  --card: #FFFFFF;             /* White */
+  --sidebar-bg: #FFFFFF;
+  --card: #FFFFFF;             /* White Card */
   --card-subtle: #F8FAFC;
+  --input-bg: #F8FAFC;
   --section-alt-bg: #FFFFFF;
   
   /* Text & Border */
@@ -37,16 +40,19 @@
 }
 
 [data-theme="dark"] {
-  /* DARK THEME (From Design System: Main background: #0F172A, Navbar: #1E293B, Cards: #1E293B, Text: #F8FAFC) */
+  /* DARK THEME (From Design System) */
   --primary: #F8FAFC;
   --secondary: #94A3B8;
   --accent: #10B981;
   --accent-hover: #059669;
-  --light-accent: rgba(16, 185, 129, 0.16);
+  --light-accent: #064E3B;
+  --active-nav-bg: #064E3B;    /* Active Nav Background */
   --bg: #0F172A;              /* Deep Navy */
   --navbar-bg: #1E293B;        /* Navbar */
+  --sidebar-bg: #0F172A;       /* Sidebar */
   --card: #1E293B;            /* Dark Card */
   --card-subtle: #162032;     /* Subtle Inner Card */
+  --input-bg: #0F172A;
   --section-alt-bg: #141E33;
   
   /* Text & Border */
