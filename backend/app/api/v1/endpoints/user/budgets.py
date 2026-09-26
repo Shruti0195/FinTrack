@@ -348,6 +348,62 @@ def list_user_budgets(
         return result
 
 
+def check_budget_income_limit(
+    db: Session,
+    user_id: uuid.UUID,
+    target_months: list[int],
+    target_year: int,
+    new_limit: float,
+    current_budget_id: Optional[uuid.UUID] = None,
+):
+    """
+    Validates that the total combined monthly budget for target_months does not exceed total income for that month.
+    """
+    month_names = [
+        "", "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    for m in target_months:
+        # Calculate total income for user in month m, target_year
+        income_sum = (
+            db.query(func.coalesce(func.sum(Transaction.amount), 0.0))
+            .filter(
+                Transaction.user_id == user_id,
+                Transaction.type == "income",
+                func.extract("month", Transaction.transaction_date) == m,
+                func.extract("year", Transaction.transaction_date) == target_year,
+            )
+            .scalar()
+        )
+        total_income = float(income_sum or 0.0)
+
+        # Calculate existing total budgets for user in month m, target_year
+        b_query = db.query(func.coalesce(func.sum(Budget.limit_amount), 0.0)).filter(
+            Budget.user_id == user_id,
+            Budget.month == m,
+            Budget.year == target_year,
+        )
+        if current_budget_id:
+            b_query = b_query.filter(Budget.id != current_budget_id)
+
+        existing_budget_sum = float(b_query.scalar() or 0.0)
+        proposed_total = existing_budget_sum + new_limit
+
+        if proposed_total > total_income:
+            m_name = month_names[m]
+            if total_income > 0:
+                available = max(0.0, total_income - existing_budget_sum)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Total monthly budget limit (₹{proposed_total:,.2f}) cannot exceed total income (₹{total_income:,.2f}) for {m_name} {target_year}. Maximum available budget remaining: ₹{available:,.2f}.",
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot set budget for {m_name} {target_year} because no income entries have been logged for this period yet (Total Income: ₹0.00). Please log income first.",
+                )
+
+
 @router.post("", response_model=BudgetResponse, status_code=status.HTTP_201_CREATED)
 def create_budget(
     budget_in: BudgetCreate,
@@ -382,6 +438,9 @@ def create_budget(
         target_months = list(range(s_m, s_m + 6))
     elif budget_in.apply_to_period == "year":
         target_months = list(range(1, 13))
+
+    # 3. Validate that total monthly budget limit does not exceed monthly income
+    check_budget_income_limit(db, current_user.id, target_months, budget_in.year, float(budget_in.limit_amount))
 
     if budget_in.apply_to_period == "single_month":
         # Check duplicate
@@ -520,6 +579,7 @@ def update_budget(
         )
 
     b, cat_name = row
+    check_budget_income_limit(db, current_user.id, [b.month], b.year, float(budget_in.limit_amount), current_budget_id=b.id)
     b.limit_amount = budget_in.limit_amount
     db.add(b)
     db.commit()

@@ -28,6 +28,7 @@ import {
   updateBudget, 
   deleteBudget 
 } from '../api/budgets';
+import { CustomSelect } from './CustomSelect';
 import type { 
   Budget, 
   BudgetSummary, 
@@ -407,99 +408,53 @@ export const BudgetsView: React.FC = () => {
             <Calendar size={16} color="var(--secondary-text)" style={{ flexShrink: 0 }} />
 
             {/* Period Type Dropdown */}
-            <select
+            <CustomSelect
               value={activePeriod}
-              onChange={(e) => setActivePeriod(e.target.value as BudgetPeriodType)}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--main-text)',
-                fontSize: '13px',
-                fontWeight: 600,
-                outline: 'none',
-                padding: '8px 6px 8px 8px',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="monthly"  style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Monthly</option>
-              <option value="quarterly" style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Quarterly</option>
-              <option value="half_yearly" style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Half-Yearly</option>
-              <option value="yearly"   style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Yearly</option>
-            </select>
+              onChange={(val) => setActivePeriod(val as BudgetPeriodType)}
+              options={[
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'quarterly', label: 'Quarterly' },
+                { value: 'half_yearly', label: 'Half-Yearly' },
+                { value: 'yearly', label: 'Yearly' }
+              ]}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
 
             {/* Divider */}
             <span style={{ width: '1px', height: '18px', backgroundColor: 'var(--border)', flexShrink: 0 }} />
 
             {/* Period Value Dropdown — Monthly */}
             {activePeriod === 'monthly' && (
-              <select
+              <CustomSelect
                 value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--main-text)',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  outline: 'none',
-                  padding: '8px 6px',
-                  cursor: 'pointer',
-                }}
-              >
-                {MONTH_OPTIONS.map((m) => (
-                  <option key={m.value} value={m.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedMonth(Number(val))}
+                options={MONTH_OPTIONS.map((m) => ({ value: m.value, label: m.label }))}
+                size="sm"
+                buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+              />
             )}
 
             {/* Period Value Dropdown — Quarterly */}
             {activePeriod === 'quarterly' && (
-              <select
+              <CustomSelect
                 value={selectedQuarter}
-                onChange={(e) => setSelectedQuarter(Number(e.target.value))}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--main-text)',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  outline: 'none',
-                  padding: '8px 6px',
-                  cursor: 'pointer',
-                }}
-              >
-                {QUARTER_OPTIONS.map((q) => (
-                  <option key={q.value} value={q.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                    {q.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedQuarter(Number(val))}
+                options={QUARTER_OPTIONS.map((q) => ({ value: q.value, label: q.label }))}
+                size="sm"
+                buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+              />
             )}
 
             {/* Period Value Dropdown — Half-Yearly */}
             {activePeriod === 'half_yearly' && (
-              <select
+              <CustomSelect
                 value={selectedHalf}
-                onChange={(e) => setSelectedHalf(Number(e.target.value))}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--main-text)',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  outline: 'none',
-                  padding: '8px 6px',
-                  cursor: 'pointer',
-                }}
-              >
-                {HALF_YEAR_OPTIONS.map((h) => (
-                  <option key={h.value} value={h.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                    {h.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedHalf(Number(val))}
+                options={HALF_YEAR_OPTIONS.map((h) => ({ value: h.value, label: h.label }))}
+                size="sm"
+                buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+              />
             )}
 
             {/* Divider before Year (not for yearly, which has no period value) */}
@@ -508,26 +463,13 @@ export const BudgetsView: React.FC = () => {
             )}
 
             {/* Year Dropdown (Always Visible) */}
-            <select
+            <CustomSelect
               value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--main-text)',
-                fontSize: '13px',
-                fontWeight: 500,
-                outline: 'none',
-                padding: '8px 6px 8px 6px',
-                cursor: 'pointer',
-              }}
-            >
-              {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                <option key={y} value={y} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                  {y}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedYear(Number(val))}
+              options={[2024, 2025, 2026, 2027, 2028].map((y) => ({ value: y, label: String(y) }))}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
           </div>
 
           {/* Quick jump to Today */}
@@ -1023,19 +965,14 @@ export const BudgetsView: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
                   Category
                 </label>
-                <select
+                <CustomSelect
                   value={formCategoryId}
-                  onChange={(e) => setFormCategoryId(e.target.value)}
-                  className="input-field"
-                  required
-                  style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px' }}
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFormCategoryId(String(val))}
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  placeholder="Select category..."
+                  style={{ width: '100%' }}
+                  buttonStyle={{ height: '42px', fontSize: '14px' }}
+                />
               </div>
 
               {/* Month & Year Selection (Full Freedom) */}
@@ -1044,35 +981,25 @@ export const BudgetsView: React.FC = () => {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
                     Target Month
                   </label>
-                  <select
+                  <CustomSelect
                     value={formMonth}
-                    onChange={(e) => setFormMonth(Number(e.target.value))}
-                    className="input-field"
-                    style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px', cursor: 'pointer' }}
-                  >
-                    {MONTH_OPTIONS.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setFormMonth(Number(val))}
+                    options={MONTH_OPTIONS.map((m) => ({ value: m.value, label: m.label }))}
+                    style={{ width: '100%' }}
+                    buttonStyle={{ height: '42px', fontSize: '14px' }}
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
                     Target Year
                   </label>
-                  <select
+                  <CustomSelect
                     value={formYear}
-                    onChange={(e) => setFormYear(Number(e.target.value))}
-                    className="input-field"
-                    style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px', cursor: 'pointer' }}
-                  >
-                    {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setFormYear(Number(val))}
+                    options={[2024, 2025, 2026, 2027, 2028].map((y) => ({ value: y, label: String(y) }))}
+                    style={{ width: '100%' }}
+                    buttonStyle={{ height: '42px', fontSize: '14px' }}
+                  />
                 </div>
               </div>
 

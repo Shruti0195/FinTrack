@@ -4,7 +4,6 @@ import {
   Search,
   Download,
   Calendar,
-  Filter,
   ArrowUpDown,
   Edit2,
   Trash2,
@@ -17,9 +16,35 @@ import {
   AlertCircle,
   FileSpreadsheet,
   FileText,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  RotateCcw,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import api from '../api/client';
+import { CustomSelect } from '../components/CustomSelect';
+
+const getPageNumbers = (currentPage: number, totalPages: number): (number | string)[] => {
+  const pages: (number | string)[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (currentPage > 3) pages.push('...');
+    
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+    
+    if (currentPage < totalPages - 2) pages.push('...');
+    pages.push(totalPages);
+  }
+  return pages;
+};
 
 export interface IncomeCategory {
   id: string;
@@ -75,13 +100,89 @@ export const IncomePage: React.FC = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState<number>(10);
 
-  // Filter & Search state
+  // Column Filter & Search state
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [sortBy, setSortBy] = useState<string>('date_desc');
+
+  // Column-wise filter states (Date & Amount; Description is excluded per requirements)
+  const [colDateFilter, setColDateFilter] = useState<string>('');
+  const [colMinAmount, setColMinAmount] = useState<string>('');
+  const [colMaxAmount, setColMaxAmount] = useState<string>('');
+
+  const hasActiveColumnFilters = Boolean(
+    colDateFilter || colMinAmount || colMaxAmount || (selectedCategory !== 'all')
+  );
+
+  const resetColumnFilters = () => {
+    setColDateFilter('');
+    setColMinAmount('');
+    setColMaxAmount('');
+    setSelectedCategory('all');
+    setPage(1);
+  };
+
+  // Column Sorting Handler & Helper
+  const handleColumnSort = (colKey: 'date' | 'category' | 'description' | 'amount') => {
+    setPage(1);
+    if (colKey === 'date') {
+      setSortBy((prev) => (prev === 'date_desc' ? 'date_asc' : 'date_desc'));
+    } else if (colKey === 'category') {
+      setSortBy((prev) => (prev === 'category_asc' ? 'category_desc' : 'category_asc'));
+    } else if (colKey === 'description') {
+      setSortBy((prev) => (prev === 'description_asc' ? 'description_desc' : 'description_asc'));
+    } else if (colKey === 'amount') {
+      setSortBy((prev) => (prev === 'amount_desc' ? 'amount_asc' : 'amount_desc'));
+    }
+  };
+
+  const renderSortHeader = (title: string, colKey: 'date' | 'category' | 'description' | 'amount', align: 'left' | 'right' = 'left') => {
+    let isActive = false;
+    let isAsc = false;
+
+    if (colKey === 'date' && (sortBy === 'date_asc' || sortBy === 'date_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'date_asc';
+    } else if (colKey === 'category' && (sortBy === 'category_asc' || sortBy === 'category_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'category_asc';
+    } else if (colKey === 'description' && (sortBy === 'description_asc' || sortBy === 'description_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'description_asc';
+    } else if (colKey === 'amount' && (sortBy === 'amount_asc' || sortBy === 'amount_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'amount_asc';
+    }
+
+    return (
+      <div
+        onClick={() => handleColumnSort(colKey)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer',
+          userSelect: 'none',
+          color: isActive ? 'var(--accent)' : 'inherit',
+          transition: 'color 0.15s ease',
+          justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+          width: '100%'
+        }}
+        title={`Click to sort by ${title} (${isActive ? (isAsc ? 'Ascending → Click for Descending' : 'Descending → Click for Ascending') : 'Click to sort'})`}
+      >
+        <span>{title}</span>
+        {isActive ? (
+          isAsc ? <ArrowUp size={14} color="var(--accent)" /> : <ArrowDown size={14} color="var(--accent)" />
+        ) : (
+          <ArrowUpDown size={13} style={{ opacity: 0.35 }} />
+        )}
+      </div>
+    );
+  };
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -141,13 +242,16 @@ export const IncomePage: React.FC = () => {
     setLoading(true);
     const params: Record<string, string | number> = {
       page,
-      limit: 10,
+      limit,
       sort_by: sortBy
     };
     if (selectedMonth > 0) params.month = selectedMonth;
     if (selectedYear > 0) params.year = selectedYear;
     if (selectedCategory !== 'all') params.category_id = selectedCategory;
     if (search.trim()) params.search = search.trim();
+    if (colDateFilter.trim()) params.date = colDateFilter.trim();
+    if (colMinAmount.trim()) params.min_amount = Number(colMinAmount);
+    if (colMaxAmount.trim()) params.max_amount = Number(colMaxAmount);
 
     api.get('/user/income', { params })
       .then((res) => {
@@ -157,7 +261,7 @@ export const IncomePage: React.FC = () => {
       })
       .catch(() => {
         // Mock fallback for demo
-        const mock: IncomeEntry[] = [
+        let mock: IncomeEntry[] = [
           {
             id: 'mock-1',
             amount: 45000,
@@ -191,12 +295,58 @@ export const IncomePage: React.FC = () => {
             transaction_date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-18`
           }
         ];
-        setIncomes(mock);
-        setTotalCount(mock.length);
-        setTotalPages(1);
+
+        // Apply column filters & search to mock dataset
+        if (selectedCategory !== 'all') {
+          mock = mock.filter(item => item.category_id === selectedCategory);
+        }
+        if (colDateFilter.trim()) {
+          mock = mock.filter(item => item.transaction_date.includes(colDateFilter.trim()));
+        }
+        if (colMinAmount.trim()) {
+          mock = mock.filter(item => item.amount >= Number(colMinAmount));
+        }
+        if (colMaxAmount.trim()) {
+          mock = mock.filter(item => item.amount <= Number(colMaxAmount));
+        }
+        if (search.trim()) {
+          const s = search.trim().toLowerCase();
+          mock = mock.filter(item =>
+            (item.description && item.description.toLowerCase().includes(s)) ||
+            item.category_name.toLowerCase().includes(s)
+          );
+        }
+
+        // Apply sorting to mock dataset
+        if (sortBy === 'date_asc') {
+          mock.sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+        } else if (sortBy === 'date_desc') {
+          mock.sort((a, b) => b.transaction_date.localeCompare(a.transaction_date));
+        } else if (sortBy === 'amount_asc') {
+          mock.sort((a, b) => a.amount - b.amount);
+        } else if (sortBy === 'amount_desc') {
+          mock.sort((a, b) => b.amount - a.amount);
+        } else if (sortBy === 'category_asc') {
+          mock.sort((a, b) => a.category_name.localeCompare(b.category_name));
+        } else if (sortBy === 'category_desc') {
+          mock.sort((a, b) => b.category_name.localeCompare(a.category_name));
+        } else if (sortBy === 'description_asc') {
+          mock.sort((a, b) => (a.description || '').localeCompare(b.description || ''));
+        } else if (sortBy === 'description_desc') {
+          mock.sort((a, b) => (b.description || '').localeCompare(a.description || ''));
+        }
+
+        const totalMockCount = mock.length;
+        const computedTotalPages = Math.max(1, Math.ceil(totalMockCount / limit));
+        const startIdx = (page - 1) * limit;
+        const pagedMock = mock.slice(startIdx, startIdx + limit);
+
+        setIncomes(pagedMock);
+        setTotalCount(totalMockCount);
+        setTotalPages(computedTotalPages);
       })
       .finally(() => setLoading(false));
-  }, [page, sortBy, selectedMonth, selectedYear, selectedCategory, search]);
+  }, [page, limit, sortBy, selectedMonth, selectedYear, selectedCategory, search, colDateFilter, colMinAmount, colMaxAmount]);
 
   useEffect(() => {
     fetchStats();
@@ -553,55 +703,31 @@ export const IncomePage: React.FC = () => {
             padding: '2px 8px',
             gap: '6px'
           }}>
-            <Calendar size={16} color="var(--secondary-text)" />
-            <select
+            <Calendar size={16} color="var(--secondary-text)" style={{ marginLeft: '4px' }} />
+            
+            <CustomSelect
               value={selectedMonth}
-              onChange={(e) => {
-                setSelectedMonth(Number(e.target.value));
+              onChange={(val) => {
+                setSelectedMonth(Number(val));
                 setPage(1);
               }}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--main-text)',
-                fontSize: '13px',
-                fontWeight: 500,
-                outline: 'none',
-                padding: '8px 4px',
-                cursor: 'pointer'
-              }}
-            >
-              {months.map((m) => (
-                <option key={m.value} value={m.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+              options={months.map(m => ({ value: m.value, label: m.label }))}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
 
-            <select
+            <span style={{ width: '1px', height: '18px', backgroundColor: 'var(--border)' }} />
+
+            <CustomSelect
               value={selectedYear}
-              onChange={(e) => {
-                setSelectedYear(Number(e.target.value));
+              onChange={(val) => {
+                setSelectedYear(Number(val));
                 setPage(1);
               }}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--main-text)',
-                fontSize: '13px',
-                fontWeight: 500,
-                outline: 'none',
-                padding: '8px 4px',
-                cursor: 'pointer',
-                borderLeft: '1px solid var(--border)'
-              }}
-            >
-              {[2024, 2025, 2026, 2027].map((y) => (
-                <option key={y} value={y} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                  {y}
-                </option>
-              ))}
-            </select>
+              options={[2024, 2025, 2026, 2027].map(y => ({ value: y, label: String(y) }))}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
           </div>
 
           {/* Export Dropdown Menu (CSV or PDF) */}
@@ -881,61 +1007,8 @@ export const IncomePage: React.FC = () => {
             )}
           </div>
 
-          {/* Right: Filters & Sorter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            
-            {/* Category Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Filter size={15} color="var(--secondary-text)" />
-              <select
-                value={selectedCategory}
-                onChange={(e) => {
-                  setSelectedCategory(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field"
-                style={{
-                  height: '40px',
-                  width: 'auto',
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  backgroundColor: 'var(--input-bg)',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="all">All Sources</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sorter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ArrowUpDown size={15} color="var(--secondary-text)" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="input-field"
-                style={{
-                  height: '40px',
-                  width: 'auto',
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  backgroundColor: 'var(--input-bg)',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="date_desc">Newest First</option>
-                <option value="date_asc">Oldest First</option>
-                <option value="amount_desc">Amount: High to Low</option>
-                <option value="amount_asc">Amount: Low to High</option>
-              </select>
-            </div>
-
-            {/* Total entries indicator chip */}
+          {/* Right: Total entries indicator chip */}
+          <div>
             <span className="badge-pill" style={{ height: '36px', padding: '0 14px', fontSize: '12.5px' }}>
               {totalCount} {totalCount === 1 ? 'entry' : 'entries'}
             </span>
@@ -954,11 +1027,168 @@ export const IncomePage: React.FC = () => {
                 borderBottom: '1px solid var(--border)',
                 color: 'var(--secondary-text)'
               }}>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source / Category</th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Amount</th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Date', 'date')}
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Source / Category', 'category')}
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Description', 'description')}
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>
+                  {renderSortHeader('Amount', 'amount', 'right')}
+                </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', width: '110px' }}>Actions</th>
+              </tr>
+
+              {/* Column Filter Row */}
+              <tr style={{
+                backgroundColor: 'var(--card-subtle)',
+                borderBottom: '2px solid var(--border)'
+              }}>
+                {/* 1. Date Column Filter */}
+                <th style={{ padding: '6px 12px 10px 20px' }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={colDateFilter}
+                      onChange={(e) => {
+                        setColDateFilter(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '12px',
+                        padding: '4px 8px',
+                        backgroundColor: 'var(--card)',
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      title="Filter by specific date"
+                    />
+                    {colDateFilter && (
+                      <button
+                        onClick={() => { setColDateFilter(''); setPage(1); }}
+                        style={{
+                          position: 'absolute',
+                          right: '24px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--secondary-text)',
+                          cursor: 'pointer'
+                        }}
+                        title="Clear date filter"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </th>
+
+                {/* 2. Source / Category Column Filter */}
+                <th style={{ padding: '6px 12px 10px 12px' }}>
+                  <CustomSelect
+                    value={selectedCategory}
+                    onChange={(val) => {
+                      setSelectedCategory(String(val));
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: 'all', label: 'All Categories' },
+                      ...categories.map((c) => ({ value: c.id, label: c.name }))
+                    ]}
+                    size="sm"
+                    style={{ width: '100%' }}
+                    buttonStyle={{ height: '32px', fontSize: '12px' }}
+                  />
+                </th>
+
+                {/* 3. Description Column: NO FILTER (except description column) */}
+                <th style={{ padding: '6px 12px 10px 12px' }}>
+                  <div style={{
+                    fontSize: '11.5px',
+                    color: 'var(--secondary-text)',
+                    fontStyle: 'italic',
+                    padding: '4px 8px',
+                    opacity: 0.65
+                  }}>
+                    — No filter —
+                  </div>
+                </th>
+
+                {/* 4. Amount Column Filter (Min / Max) */}
+                <th style={{ padding: '6px 20px 10px 12px' }}>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      placeholder="Min ₹"
+                      value={colMinAmount}
+                      onChange={(e) => {
+                        setColMinAmount(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '12px',
+                        padding: '4px 6px',
+                        backgroundColor: 'var(--card)',
+                        width: '75px',
+                        borderRadius: '6px',
+                        textAlign: 'right'
+                      }}
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>-</span>
+                    <input
+                      type="number"
+                      placeholder="Max ₹"
+                      value={colMaxAmount}
+                      onChange={(e) => {
+                        setColMaxAmount(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '12px',
+                        padding: '4px 6px',
+                        backgroundColor: 'var(--card)',
+                        width: '75px',
+                        borderRadius: '6px',
+                        textAlign: 'right'
+                      }}
+                    />
+                  </div>
+                </th>
+
+                {/* 5. Actions Column (Clear Filters) */}
+                <th style={{ padding: '6px 20px 10px 12px', textAlign: 'center' }}>
+                  {hasActiveColumnFilters && (
+                    <button
+                      onClick={resetColumnFilters}
+                      style={{
+                        height: '32px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--danger)',
+                        border: '1px solid var(--danger)',
+                        backgroundColor: 'var(--light-danger)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Clear column filters"
+                    >
+                      <RotateCcw size={12} /> Clear
+                    </button>
+                  )}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1113,38 +1343,211 @@ export const IncomePage: React.FC = () => {
           </table>
         </div>
 
-        {/* Pagination bar */}
-        {totalPages > 1 && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '14px 20px',
-            borderTop: '1px solid var(--border)',
-            fontSize: '13px',
-            color: 'var(--secondary-text)'
-          }}>
-            <span>Showing page {page} of {totalPages}</span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="btn-outline"
-                style={{ padding: '6px 12px', fontSize: '12px', opacity: page <= 1 ? 0.5 : 1 }}
-              >
-                Previous
-              </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="btn-outline"
-                style={{ padding: '6px 12px', fontSize: '12px', opacity: page >= totalPages ? 0.5 : 1 }}
-              >
-                Next
-              </button>
+        {/* Pagination Bar */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px',
+          borderTop: '1px solid var(--border)',
+          backgroundColor: 'var(--card-subtle)',
+          fontSize: '13px',
+          color: 'var(--secondary-text)',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}>
+          {/* Left: Entries range info & Rows-per-page pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', color: 'var(--secondary-text)', fontWeight: 500 }}>
+              Showing <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>{totalCount === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, totalCount)}</strong> of <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>{totalCount}</strong> entries
+            </span>
+
+            {/* Custom Rows Per Page Pill */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '2px 8px',
+              fontSize: '12.5px',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
+            }}>
+              <span style={{ color: 'var(--secondary-text)', fontWeight: 500 }}>Rows:</span>
+              <CustomSelect
+                value={limit}
+                onChange={(val) => {
+                  setLimit(Number(val));
+                  setPage(1);
+                }}
+                options={[
+                  { value: 5, label: '5 per page' },
+                  { value: 10, label: '10 per page' },
+                  { value: 20, label: '20 per page' },
+                  { value: 50, label: '50 per page' }
+                ]}
+                size="sm"
+                direction="up"
+                buttonStyle={{ border: 'none', background: 'transparent', height: '28px', fontSize: '12.5px', boxShadow: 'none', padding: '0 4px' }}
+              />
             </div>
           </div>
-        )}
+
+          {/* Right: Page navigation buttons in segment pill */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            backgroundColor: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '3px',
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
+          }}>
+            {/* First Page */}
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(1)}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page <= 1 ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page <= 1 ? 0.35 : 1,
+                cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page > 1) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="First Page"
+            >
+              <ChevronsLeft size={14} />
+            </button>
+
+            {/* Previous Page */}
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page <= 1 ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page <= 1 ? 0.35 : 1,
+                cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page > 1) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="Previous Page"
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            {/* Page Numbers */}
+            {getPageNumbers(page, totalPages).map((pNum, idx) => (
+              typeof pNum === 'number' ? (
+                <button
+                  key={idx}
+                  onClick={() => setPage(pNum)}
+                  style={{
+                    minWidth: '30px',
+                    height: '30px',
+                    padding: '0 8px',
+                    fontSize: '12px',
+                    fontWeight: pNum === page ? 700 : 500,
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: pNum === page ? 'var(--accent)' : 'transparent',
+                    color: pNum === page ? '#FFFFFF' : 'var(--secondary-text)',
+                    cursor: 'pointer',
+                    boxShadow: pNum === page ? '0 1px 3px rgba(16, 185, 129, 0.3)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (pNum !== page) {
+                      e.currentTarget.style.backgroundColor = 'var(--card-subtle)';
+                      e.currentTarget.style.color = 'var(--primary)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (pNum !== page) {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.color = 'var(--secondary-text)';
+                    }
+                  }}
+                >
+                  {pNum}
+                </button>
+              ) : (
+                <span key={idx} style={{ padding: '0 4px', fontSize: '12px', color: 'var(--secondary-text)' }}>
+                  ...
+                </span>
+              )
+            ))}
+
+            {/* Next Page */}
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page >= totalPages ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page >= totalPages ? 0.35 : 1,
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page < totalPages) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="Next Page"
+            >
+              <ChevronRight size={14} />
+            </button>
+
+            {/* Last Page */}
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(totalPages)}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page >= totalPages ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page >= totalPages ? 0.35 : 1,
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page < totalPages) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="Last Page"
+            >
+              <ChevronsRight size={14} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 5. ADD / EDIT INCOME MODAL */}
@@ -1234,20 +1637,14 @@ export const IncomePage: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
                   Income Source / Category *
                 </label>
-                <select
+                <CustomSelect
                   value={formCategoryId}
-                  onChange={(e) => setFormCategoryId(e.target.value)}
-                  className="input-field"
-                  style={{ height: '42px', cursor: 'pointer' }}
-                  required
-                >
-                  <option value="" disabled>Select category...</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFormCategoryId(String(val))}
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  placeholder="Select category..."
+                  style={{ width: '100%' }}
+                  buttonStyle={{ height: '42px', fontSize: '14px' }}
+                />
               </div>
 
               {/* Date */}
