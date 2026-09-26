@@ -30,6 +30,16 @@ function AppContent() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUserLoggedIn(false);
+      setAuthMode('login');
+      setAuthModalOpen(true);
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, []);
+
   const handleOpenAuth = (mode: 'login' | 'register') => {
     setAuthMode(mode);
     setAuthModalOpen(true);

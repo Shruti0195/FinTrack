@@ -4,7 +4,6 @@ import {
   Search,
   Download,
   Calendar,
-  Filter,
   ArrowUpDown,
   Edit2,
   Trash2,
@@ -20,9 +19,12 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  RotateCcw,
+  Filter
 } from 'lucide-react';
 import api from '../api/client';
+import { CustomSelect } from '../components/CustomSelect';
 
 export interface IncomeCategory {
   id: string;
@@ -89,7 +91,7 @@ export const IncomePage: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
 
-  // Filter & Search state
+  // Column Filter & Search state
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
@@ -97,6 +99,23 @@ export const IncomePage: React.FC = () => {
 
   // Ref for table container to support smooth pagination scrolling
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Column-wise filter states (Date & Amount; Description is excluded per requirements)
+  const [colDateFilter, setColDateFilter] = useState<string>('');
+  const [colMinAmount, setColMinAmount] = useState<string>('');
+  const [colMaxAmount, setColMaxAmount] = useState<string>('');
+
+  const hasActiveColumnFilters = Boolean(
+    colDateFilter || colMinAmount || colMaxAmount || (selectedCategory !== 'all')
+  );
+
+  const resetColumnFilters = () => {
+    setColDateFilter('');
+    setColMinAmount('');
+    setColMaxAmount('');
+    setSelectedCategory('all');
+    setPage(1);
+  };
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -164,6 +183,9 @@ export const IncomePage: React.FC = () => {
     if (selectedYear > 0) params.year = selectedYear;
     if (selectedCategory !== 'all') params.category_id = selectedCategory;
     if (search.trim()) params.search = search.trim();
+    if (colDateFilter.trim()) params.date = colDateFilter.trim();
+    if (colMinAmount.trim()) params.min_amount = Number(colMinAmount);
+    if (colMaxAmount.trim()) params.max_amount = Number(colMaxAmount);
 
     api.get('/user/income', { params })
       .then((res) => {
@@ -192,6 +214,15 @@ export const IncomePage: React.FC = () => {
         if (selectedCategory !== 'all') {
           mock = mock.filter(m => m.category_id === selectedCategory);
         }
+        if (colDateFilter.trim()) {
+          mock = mock.filter(m => m.transaction_date.includes(colDateFilter.trim()));
+        }
+        if (colMinAmount.trim()) {
+          mock = mock.filter(m => m.amount >= Number(colMinAmount));
+        }
+        if (colMaxAmount.trim()) {
+          mock = mock.filter(m => m.amount <= Number(colMaxAmount));
+        }
         if (search.trim()) {
           const s = search.trim().toLowerCase();
           mock = mock.filter(m => m.category_name.toLowerCase().includes(s) || (m.description || '').toLowerCase().includes(s));
@@ -219,7 +250,7 @@ export const IncomePage: React.FC = () => {
         setLoading(false);
         setIsFetching(false);
       });
-  }, [page, sortColumn, sortDirection, selectedMonth, selectedYear, selectedCategory, search]);
+  }, [page, sortColumn, sortDirection, selectedMonth, selectedYear, selectedCategory, search, colDateFilter, colMinAmount, colMaxAmount]);
 
   useEffect(() => {
     fetchStats();
@@ -556,7 +587,7 @@ export const IncomePage: React.FC = () => {
           top: '24px',
           right: '28px',
           zIndex: 9999,
-          backgroundColor: feedbackMsg.type === 'success' ? '#10B981' : '#EF4444',
+          backgroundColor: feedbackMsg.type === 'success' ? 'var(--success)' : 'var(--danger)',
           color: '#FFFFFF',
           padding: '12px 18px',
           borderRadius: '8px',
@@ -603,55 +634,31 @@ export const IncomePage: React.FC = () => {
             padding: '2px 8px',
             gap: '6px'
           }}>
-            <Calendar size={16} color="var(--secondary-text)" />
-            <select
+            <Calendar size={16} color="var(--secondary-text)" style={{ marginLeft: '4px' }} />
+            
+            <CustomSelect
               value={selectedMonth}
-              onChange={(e) => {
-                setSelectedMonth(Number(e.target.value));
+              onChange={(val) => {
+                setSelectedMonth(Number(val));
                 setPage(1);
               }}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--main-text)',
-                fontSize: '13px',
-                fontWeight: 500,
-                outline: 'none',
-                padding: '8px 4px',
-                cursor: 'pointer'
-              }}
-            >
-              {months.map((m) => (
-                <option key={m.value} value={m.value} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+              options={months.map(m => ({ value: m.value, label: m.label }))}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
 
-            <select
+            <span style={{ width: '1px', height: '18px', backgroundColor: 'var(--border)' }} />
+
+            <CustomSelect
               value={selectedYear}
-              onChange={(e) => {
-                setSelectedYear(Number(e.target.value));
+              onChange={(val) => {
+                setSelectedYear(Number(val));
                 setPage(1);
               }}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--main-text)',
-                fontSize: '13px',
-                fontWeight: 500,
-                outline: 'none',
-                padding: '8px 4px',
-                cursor: 'pointer',
-                borderLeft: '1px solid var(--border)'
-              }}
-            >
-              {[2024, 2025, 2026, 2027].map((y) => (
-                <option key={y} value={y} style={{ background: 'var(--card)', color: 'var(--main-text)' }}>
-                  {y}
-                </option>
-              ))}
-            </select>
+              options={[2024, 2025, 2026, 2027].map(y => ({ value: y, label: String(y) }))}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
           </div>
 
           {/* Export Dropdown Menu (CSV or PDF) */}
@@ -820,7 +827,7 @@ export const IncomePage: React.FC = () => {
               width: '28px',
               height: '28px',
               borderRadius: '50%',
-              background: 'rgba(59, 130, 246, 0.12)',
+              background: 'var(--light-info)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -847,7 +854,7 @@ export const IncomePage: React.FC = () => {
               width: '28px',
               height: '28px',
               borderRadius: '50%',
-              background: 'rgba(245, 158, 11, 0.12)',
+              background: 'var(--light-warning)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1130,6 +1137,155 @@ export const IncomePage: React.FC = () => {
 
                 {/* Actions Header */}
                 <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', width: '110px' }}>Actions</th>
+              </tr>
+
+              {/* Column Filter Row */}
+              <tr style={{
+                backgroundColor: 'var(--card-subtle)',
+                borderBottom: '2px solid var(--border)'
+              }}>
+                {/* 1. Date Column Filter */}
+                <th style={{ padding: '6px 12px 10px 20px' }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={colDateFilter}
+                      onChange={(e) => {
+                        setColDateFilter(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '12px',
+                        padding: '4px 8px',
+                        backgroundColor: 'var(--card)',
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      title="Filter by specific date"
+                    />
+                    {colDateFilter && (
+                      <button
+                        onClick={() => { setColDateFilter(''); setPage(1); }}
+                        style={{
+                          position: 'absolute',
+                          right: '24px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--secondary-text)',
+                          cursor: 'pointer'
+                        }}
+                        title="Clear date filter"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </th>
+
+                {/* 2. Source / Category Column Filter */}
+                <th style={{ padding: '6px 12px 10px 12px' }}>
+                  <CustomSelect
+                    value={selectedCategory}
+                    onChange={(val) => {
+                      setSelectedCategory(String(val));
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: 'all', label: 'All Categories' },
+                      ...categories.map((c) => ({ value: c.id, label: c.name }))
+                    ]}
+                    size="sm"
+                    style={{ width: '100%' }}
+                    buttonStyle={{ height: '32px', fontSize: '12px' }}
+                  />
+                </th>
+
+                {/* 3. Description Column: NO FILTER (except description column) */}
+                <th style={{ padding: '6px 12px 10px 12px' }}>
+                  <div style={{
+                    fontSize: '11.5px',
+                    color: 'var(--secondary-text)',
+                    fontStyle: 'italic',
+                    padding: '4px 8px',
+                    opacity: 0.65
+                  }}>
+                    — No filter —
+                  </div>
+                </th>
+
+                {/* 4. Amount Column Filter (Min / Max) */}
+                <th style={{ padding: '6px 20px 10px 12px' }}>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      placeholder="Min ₹"
+                      value={colMinAmount}
+                      onChange={(e) => {
+                        setColMinAmount(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '12px',
+                        padding: '4px 6px',
+                        backgroundColor: 'var(--card)',
+                        width: '75px',
+                        borderRadius: '6px',
+                        textAlign: 'right'
+                      }}
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>-</span>
+                    <input
+                      type="number"
+                      placeholder="Max ₹"
+                      value={colMaxAmount}
+                      onChange={(e) => {
+                        setColMaxAmount(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '12px',
+                        padding: '4px 6px',
+                        backgroundColor: 'var(--card)',
+                        width: '75px',
+                        borderRadius: '6px',
+                        textAlign: 'right'
+                      }}
+                    />
+                  </div>
+                </th>
+
+                {/* 5. Actions Column (Clear Filters) */}
+                <th style={{ padding: '6px 20px 10px 12px', textAlign: 'center' }}>
+                  {hasActiveColumnFilters && (
+                    <button
+                      onClick={resetColumnFilters}
+                      style={{
+                        height: '32px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--danger)',
+                        border: '1px solid var(--danger)',
+                        backgroundColor: 'var(--light-danger)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Clear column filters"
+                    >
+                      <RotateCcw size={12} /> Clear
+                    </button>
+                  )}
+                </th>
               </tr>
             </thead>
             <tbody style={{ opacity: isFetching ? 0.45 : 1, transition: 'opacity 0.2s ease-in-out' }}>
@@ -1436,7 +1592,7 @@ export const IncomePage: React.FC = () => {
             <form onSubmit={handleSubmitForm} style={{ padding: '24px' }}>
               {formError && (
                 <div style={{
-                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                  backgroundColor: 'var(--light-danger)',
                   border: '1px solid var(--danger)',
                   color: 'var(--danger)',
                   padding: '10px 14px',
@@ -1471,20 +1627,14 @@ export const IncomePage: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
                   Income Source / Category *
                 </label>
-                <select
+                <CustomSelect
                   value={formCategoryId}
-                  onChange={(e) => setFormCategoryId(e.target.value)}
-                  className="input-field"
-                  style={{ height: '42px', cursor: 'pointer' }}
-                  required
-                >
-                  <option value="" disabled>Select category...</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setFormCategoryId(String(val))}
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  placeholder="Select category..."
+                  style={{ width: '100%' }}
+                  buttonStyle={{ height: '42px', fontSize: '14px' }}
+                />
               </div>
 
               {/* Date */}
@@ -1574,7 +1724,7 @@ export const IncomePage: React.FC = () => {
               width: '48px',
               height: '48px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(239, 68, 68, 0.12)',
+              backgroundColor: 'var(--light-danger)',
               color: 'var(--danger)',
               display: 'flex',
               alignItems: 'center',
