@@ -18,8 +18,7 @@ import {
   HeartPulse,
   Home,
   RefreshCw,
-  FolderMinus,
-  Layers
+  FolderMinus
 } from 'lucide-react';
 import { 
   getBudgets, 
@@ -193,7 +192,6 @@ export const BudgetsView: React.FC = () => {
   const [formLimitAmount, setFormLimitAmount] = useState('');
   const [formMonth, setFormMonth] = useState<number>(9);
   const [formYear, setFormYear] = useState<number>(2026);
-  const [formApplyToPeriod, setFormApplyToPeriod] = useState<'single_month' | 'quarter' | 'half_year' | 'year'>('single_month');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -266,8 +264,7 @@ export const BudgetsView: React.FC = () => {
     setFormLimitAmount('');
     setFormMonth(selectedMonth);
     setFormYear(selectedYear);
-    setFormApplyToPeriod('single_month');
-    
+
     // Auto-select first category that isn't budgeted yet
     const budgetedCatIds = new Set(budgets.map(b => b.category_id));
     const firstAvailable = categories.find(c => !budgetedCatIds.has(c.id));
@@ -296,21 +293,12 @@ export const BudgetsView: React.FC = () => {
         month: formMonth,
         year: formYear,
         limit_amount: limit,
-        apply_to_period: formApplyToPeriod
+        apply_to_period: 'single_month'
       });
       setIsCreateModalOpen(false);
       const catName = categories.find(c => c.id === formCategoryId)?.name || 'Category';
-      
-      const periodLabelStr = formApplyToPeriod === 'year' 
-        ? `all 12 months of ${formYear}` 
-        : formApplyToPeriod === 'half_year' 
-          ? `6 months of H${formMonth <= 6 ? 1 : 2} ${formYear}` 
-          : formApplyToPeriod === 'quarter' 
-            ? `Q${Math.floor((formMonth - 1) / 3) + 1} ${formYear}` 
-            : `${MONTH_NAMES[formMonth - 1]} ${formYear}`;
+      setSuccessMsg(`Budget for ${catName} set for ${MONTH_NAMES[formMonth - 1]} ${formYear}!`);
 
-      setSuccessMsg(`Budget for ${catName} set for ${periodLabelStr}!`);
-      
       if (formMonth !== selectedMonth || formYear !== selectedYear) {
         setSelectedMonth(formMonth);
         setSelectedYear(formYear);
@@ -1088,45 +1076,10 @@ export const BudgetsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Apply Scope Option (Single Month, Quarter, Half-Year, Year) */}
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                  <Layers size={14} color="var(--accent)" /> Apply Scope
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                  {[
-                    { id: 'single_month', label: 'Single Month' },
-                    { id: 'quarter', label: 'Entire Quarter (3 mo)' },
-                    { id: 'half_year', label: 'Half-Year (6 mo)' },
-                    { id: 'year', label: 'Full Year (12 mo)' }
-                  ].map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setFormApplyToPeriod(opt.id as any)}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 'var(--radius-btn)',
-                        border: formApplyToPeriod === opt.id ? '2px solid var(--accent)' : '1px solid var(--border)',
-                        backgroundColor: formApplyToPeriod === opt.id ? 'var(--light-accent)' : 'var(--card-subtle)',
-                        color: formApplyToPeriod === opt.id ? 'var(--accent-hover)' : 'var(--main-text)',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        textAlign: 'center',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Monthly Limit Amount */}
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                  Monthly Limit Amount (₹)
+                  Monthly Limit (₹)
                 </label>
                 <input
                   type="number"
@@ -1140,13 +1093,7 @@ export const BudgetsView: React.FC = () => {
                   style={{ width: '100%', padding: '10px 12px', fontSize: '13.5px' }}
                 />
                 <span style={{ fontSize: '11.5px', color: 'var(--secondary-text)', marginTop: '4px', display: 'block' }}>
-                  {formApplyToPeriod === 'year' 
-                    ? `Will allocate ₹${formLimitAmount || 0}/month across all 12 months in ${formYear}` 
-                    : formApplyToPeriod === 'quarter' 
-                      ? `Will allocate ₹${formLimitAmount || 0}/month across all 3 months in Q${Math.floor((formMonth - 1) / 3) + 1}` 
-                      : formApplyToPeriod === 'half_year'
-                        ? `Will allocate ₹${formLimitAmount || 0}/month across all 6 months in H${formMonth <= 6 ? 1 : 2}`
-                        : `Allocates ₹${formLimitAmount || 0} for ${MONTH_NAMES[formMonth - 1]} ${formYear}`}
+                  Spending limit for {MONTH_NAMES[formMonth - 1]} {formYear}
                 </span>
               </div>
 
