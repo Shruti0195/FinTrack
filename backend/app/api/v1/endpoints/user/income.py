@@ -6,7 +6,7 @@ from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse, Response
-from sqlalchemy import func, extract, desc, asc, cast, String
+from sqlalchemy import func, extract, desc, asc, or_
 from sqlalchemy.orm import Session
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -20,6 +20,7 @@ from app.models.transaction import Transaction
 from app.models.category import Category
 from app.schemas.income import (
     IncomeCategoryOut,
+    CustomCategoryCreate,
     IncomeCreate,
     IncomeUpdate,
     IncomeOut,
@@ -37,15 +38,64 @@ def get_income_categories(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Get all active income categories (e.g. Salary, Freelancing, Business, Interest, Other).
+    Get all active income categories (system defaults + custom categories for this user).
     """
     categories = (
         db.query(Category)
-        .filter(Category.type == "income", Category.is_active == True)
-        .order_by(Category.name.asc())
+        .filter(
+            Category.type == "income",
+            Category.is_active == True,
+            or_(Category.user_id.is_(None), Category.user_id == current_user.id),
+        )
+        .order_by(Category.is_default.desc(), Category.name.asc())
         .all()
     )
     return categories
+
+
+@router.post("/categories", response_model=IncomeCategoryOut, status_code=status.HTTP_201_CREATED)
+def create_custom_income_category(
+    cat_in: CustomCategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Create a custom income category scoped exclusively to the authenticated user.
+    """
+    cleaned_name = cat_in.name.strip()
+    if not cleaned_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category name cannot be empty.",
+        )
+
+    # Check if category with same name already exists for this user or as a default
+    existing = (
+        db.query(Category)
+        .filter(
+            Category.type == "income",
+            Category.is_active == True,
+            func.lower(Category.name) == cleaned_name.lower(),
+            or_(Category.user_id.is_(None), Category.user_id == current_user.id),
+        )
+        .first()
+    )
+    if existing:
+        return existing
+
+    new_cat = Category(
+        name=cleaned_name,
+        type="income",
+        is_default=False,
+        is_active=True,
+        user_id=current_user.id,
+    )
+    db.add(new_cat)
+    db.commit()
+    db.refresh(new_cat)
+
+    return new_cat
+
 
 
 @router.get("/stats", response_model=IncomeStatsResponse)
@@ -540,8 +590,6 @@ def list_income(
     # Sorting
     if sort_by == "date_asc":
         query = query.order_by(asc(Transaction.transaction_date), asc(Transaction.created_at))
-    elif sort_by == "date_desc":
-        query = query.order_by(desc(Transaction.transaction_date), desc(Transaction.created_at))
     elif sort_by == "amount_desc":
         query = query.order_by(desc(Transaction.amount), desc(Transaction.transaction_date))
     elif sort_by == "amount_asc":
@@ -602,13 +650,14 @@ def create_income(
             Category.id == income_in.category_id,
             Category.type == "income",
             Category.is_active == True,
+            or_(Category.user_id.is_(None), Category.user_id == current_user.id),
         )
         .first()
     )
     if not category:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid category selected. Category must be an active income category.",
+            detail="Invalid category selected. Category must be an active income category for your account.",
         )
 
     tx = Transaction(
@@ -700,6 +749,7 @@ def update_income(
                 Category.id == income_in.category_id,
                 Category.type == "income",
                 Category.is_active == True,
+                or_(Category.user_id.is_(None), Category.user_id == current_user.id),
             )
             .first()
         )

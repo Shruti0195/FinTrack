@@ -16,20 +16,42 @@ import {
   AlertCircle,
   FileSpreadsheet,
   FileText,
-  ChevronUp,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   RotateCcw,
-  Filter
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
+
+const getPageNumbers = (currentPage: number, totalPages: number): (number | string)[] => {
+  const pages: (number | string)[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (currentPage > 3) pages.push('...');
+    
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+    
+    if (currentPage < totalPages - 2) pages.push('...');
+    pages.push(totalPages);
+  }
+  return pages;
+};
 
 export interface IncomeCategory {
   id: string;
   name: string;
   type: string;
+  is_default?: boolean;
+  user_id?: string | null;
 }
 
 export interface IncomeEntry {
@@ -52,11 +74,6 @@ export interface IncomeStats {
   top_source_amount: number;
   top_source_percentage: number;
 }
-
-const PAGE_SIZE = 6;
-
-export type SortColumn = 'date' | 'category' | 'description' | 'amount';
-export type SortDirection = 'asc' | 'desc';
 
 const DEFAULT_CATEGORIES: IncomeCategory[] = [
   { id: 'cat-1', name: 'Salary', type: 'income' },
@@ -82,23 +99,17 @@ export const IncomePage: React.FC = () => {
   });
 
   const [loading, setLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-
-  // Column sort state: null means normal default sorting
-  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
+  const [limit, setLimit] = useState<number>(10);
 
   // Column Filter & Search state
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-
-  // Ref for table container to support smooth pagination scrolling
-  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [sortBy, setSortBy] = useState<string>('date_desc');
 
   // Column-wise filter states (Date & Amount; Description is excluded per requirements)
   const [colDateFilter, setColDateFilter] = useState<string>('');
@@ -115,6 +126,64 @@ export const IncomePage: React.FC = () => {
     setColMaxAmount('');
     setSelectedCategory('all');
     setPage(1);
+  };
+
+  // Column Sorting Handler & Helper
+  const handleColumnSort = (colKey: 'date' | 'category' | 'description' | 'amount') => {
+    setPage(1);
+    if (colKey === 'date') {
+      setSortBy((prev) => (prev === 'date_desc' ? 'date_asc' : 'date_desc'));
+    } else if (colKey === 'category') {
+      setSortBy((prev) => (prev === 'category_asc' ? 'category_desc' : 'category_asc'));
+    } else if (colKey === 'description') {
+      setSortBy((prev) => (prev === 'description_asc' ? 'description_desc' : 'description_asc'));
+    } else if (colKey === 'amount') {
+      setSortBy((prev) => (prev === 'amount_desc' ? 'amount_asc' : 'amount_desc'));
+    }
+  };
+
+  const renderSortHeader = (title: string, colKey: 'date' | 'category' | 'description' | 'amount', align: 'left' | 'right' = 'left') => {
+    let isActive = false;
+    let isAsc = false;
+
+    if (colKey === 'date' && (sortBy === 'date_asc' || sortBy === 'date_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'date_asc';
+    } else if (colKey === 'category' && (sortBy === 'category_asc' || sortBy === 'category_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'category_asc';
+    } else if (colKey === 'description' && (sortBy === 'description_asc' || sortBy === 'description_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'description_asc';
+    } else if (colKey === 'amount' && (sortBy === 'amount_asc' || sortBy === 'amount_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'amount_asc';
+    }
+
+    return (
+      <div
+        onClick={() => handleColumnSort(colKey)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer',
+          userSelect: 'none',
+          color: isActive ? 'var(--accent)' : 'inherit',
+          transition: 'color 0.15s ease',
+          justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+          width: '100%'
+        }}
+        title={`Click to sort by ${title} (${isActive ? (isAsc ? 'Ascending → Click for Descending' : 'Descending → Click for Ascending') : 'Click to sort'})`}
+      >
+        <span>{title}</span>
+        {isActive ? (
+          isAsc ? <ArrowUp size={14} color="var(--accent)" /> : <ArrowDown size={14} color="var(--accent)" />
+        ) : (
+          <ArrowUpDown size={13} style={{ opacity: 0.35 }} />
+        )}
+      </div>
+    );
   };
 
   // Modals state
@@ -144,6 +213,40 @@ export const IncomePage: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Custom Category creation state
+  const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customCategoryError, setCustomCategoryError] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  const handleCreateCustomCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customCategoryName.trim()) {
+      setCustomCategoryError('Category name is required.');
+      return;
+    }
+    setIsCreatingCategory(true);
+    setCustomCategoryError('');
+    try {
+      const res = await api.post('/user/income/categories', { name: customCategoryName.trim() });
+      const newCat: IncomeCategory = res.data;
+
+      setCategories((prev) => {
+        if (prev.some((c) => c.id === newCat.id)) return prev;
+        return [...prev, newCat];
+      });
+
+      setFormCategoryId(newCat.id);
+      setCustomCategoryName('');
+      setIsAddingCustomCategory(false);
+      showFeedback(`Custom category "${newCat.name}" added!`, 'success');
+    } catch (err: any) {
+      setCustomCategoryError(err.response?.data?.detail || 'Failed to create custom category.');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
+
   // Fetch categories once
   useEffect(() => {
     api.get('/user/income/categories')
@@ -170,14 +273,13 @@ export const IncomePage: React.FC = () => {
       });
   }, [selectedMonth, selectedYear]);
 
-  // Fetch income entries with current filters & sorting
+  // Fetch income entries with current filters
   const fetchIncomes = useCallback(() => {
-    setIsFetching(true);
-    const sortByParam = sortColumn && sortDirection ? `${sortColumn}_${sortDirection}` : 'date_desc';
+    setLoading(true);
     const params: Record<string, string | number> = {
       page,
-      limit: PAGE_SIZE,
-      sort_by: sortByParam
+      limit,
+      sort_by: sortBy
     };
     if (selectedMonth > 0) params.month = selectedMonth;
     if (selectedYear > 0) params.year = selectedYear;
@@ -194,95 +296,98 @@ export const IncomePage: React.FC = () => {
         setTotalPages(res.data.total_pages || 1);
       })
       .catch(() => {
-        // Mock fallback for demo (14 realistic records)
+        // Mock fallback for demo
         let mock: IncomeEntry[] = [
-          { id: 'm-1', amount: 52000, category_id: 'cat-1', category_name: 'Salary', description: 'Monthly Software Engineering Salary', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-01` },
-          { id: 'm-2', amount: 12500, category_id: 'cat-2', category_name: 'Freelancing', description: 'E-commerce Website UI Redesign', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-03` },
-          { id: 'm-3', amount: 18000, category_id: 'cat-3', category_name: 'Business', description: 'Digital Products & Template Sales', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-05` },
-          { id: 'm-4', amount: 1450, category_id: 'cat-4', category_name: 'Interest', description: 'Quarterly High-Yield Savings Interest', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-07` },
-          { id: 'm-5', amount: 8200, category_id: 'cat-2', category_name: 'Freelancing', description: 'Brand Identity & Logo Suite', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-09` },
-          { id: 'm-6', amount: 4500, category_id: 'cat-5', category_name: 'Other', description: 'Sold Old Graphic Tablet', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-11` },
-          { id: 'm-7', amount: 9800, category_id: 'cat-3', category_name: 'Business', description: 'Consulting Workshop Honorarium', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-13` },
-          { id: 'm-8', amount: 14000, category_id: 'cat-2', category_name: 'Freelancing', description: 'Mobile App MVP Frontend Development', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-16` },
-          { id: 'm-9', amount: 2100, category_id: 'cat-4', category_name: 'Interest', description: 'Fixed Deposit Interest Credit', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-18` },
-          { id: 'm-10', amount: 3200, category_id: 'cat-5', category_name: 'Other', description: 'Cashback Rewards & Referral Bonus', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-20` },
-          { id: 'm-11', amount: 7500, category_id: 'cat-2', category_name: 'Freelancing', description: 'SEO Optimization & Technical Writing', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-21` },
-          { id: 'm-12', amount: 15500, category_id: 'cat-3', category_name: 'Business', description: 'SaaS Subscription Revenue Share', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-22` },
-          { id: 'm-13', amount: 10000, category_id: 'cat-1', category_name: 'Salary', description: 'Quarterly Performance Incentive', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-23` },
-          { id: 'm-14', amount: 2800, category_id: 'cat-5', category_name: 'Other', description: 'Used Textbook & Gadget Resale', transaction_date: `${selectedYear}-${String(selectedMonth || 9).padStart(2, '0')}-24` },
+          {
+            id: 'mock-1',
+            amount: 45000,
+            category_id: 'cat-1',
+            category_name: 'Salary',
+            description: 'September Salary Payment',
+            transaction_date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
+          },
+          {
+            id: 'mock-2',
+            amount: 6500,
+            category_id: 'cat-2',
+            category_name: 'Freelancing',
+            description: 'Logo Design Project',
+            transaction_date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-05`
+          },
+          {
+            id: 'mock-3',
+            amount: 350,
+            category_id: 'cat-4',
+            category_name: 'Interest',
+            description: 'Savings account interest',
+            transaction_date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-12`
+          },
+          {
+            id: 'mock-4',
+            amount: 3150,
+            category_id: 'cat-5',
+            category_name: 'Other',
+            description: 'Sold old gadget online',
+            transaction_date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-18`
+          }
         ];
+
+        // Apply column filters & search to mock dataset
         if (selectedCategory !== 'all') {
-          mock = mock.filter(m => m.category_id === selectedCategory);
+          mock = mock.filter(item => item.category_id === selectedCategory);
         }
         if (colDateFilter.trim()) {
-          mock = mock.filter(m => m.transaction_date.includes(colDateFilter.trim()));
+          mock = mock.filter(item => item.transaction_date.includes(colDateFilter.trim()));
         }
         if (colMinAmount.trim()) {
-          mock = mock.filter(m => m.amount >= Number(colMinAmount));
+          mock = mock.filter(item => item.amount >= Number(colMinAmount));
         }
         if (colMaxAmount.trim()) {
-          mock = mock.filter(m => m.amount <= Number(colMaxAmount));
+          mock = mock.filter(item => item.amount <= Number(colMaxAmount));
         }
         if (search.trim()) {
           const s = search.trim().toLowerCase();
-          mock = mock.filter(m => m.category_name.toLowerCase().includes(s) || (m.description || '').toLowerCase().includes(s));
+          mock = mock.filter(item =>
+            (item.description && item.description.toLowerCase().includes(s)) ||
+            item.category_name.toLowerCase().includes(s)
+          );
         }
-        // Column sort on mock data
-        if (sortColumn === 'date') {
-          mock.sort((a, b) => sortDirection === 'asc' ? a.transaction_date.localeCompare(b.transaction_date) : b.transaction_date.localeCompare(a.transaction_date));
-        } else if (sortColumn === 'amount') {
-          mock.sort((a, b) => sortDirection === 'asc' ? a.amount - b.amount : b.amount - a.amount);
-        } else if (sortColumn === 'category') {
-          mock.sort((a, b) => sortDirection === 'asc' ? a.category_name.localeCompare(b.category_name) : b.category_name.localeCompare(a.category_name));
-        } else if (sortColumn === 'description') {
-          mock.sort((a, b) => sortDirection === 'asc' ? (a.description || '').localeCompare(b.description || '') : (b.description || '').localeCompare(a.description || ''));
-        } else {
-          // Normal: newest first
+
+        // Apply sorting to mock dataset
+        if (sortBy === 'date_asc') {
+          mock.sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+        } else if (sortBy === 'date_desc') {
           mock.sort((a, b) => b.transaction_date.localeCompare(a.transaction_date));
+        } else if (sortBy === 'amount_asc') {
+          mock.sort((a, b) => a.amount - b.amount);
+        } else if (sortBy === 'amount_desc') {
+          mock.sort((a, b) => b.amount - a.amount);
+        } else if (sortBy === 'category_asc') {
+          mock.sort((a, b) => a.category_name.localeCompare(b.category_name));
+        } else if (sortBy === 'category_desc') {
+          mock.sort((a, b) => b.category_name.localeCompare(a.category_name));
+        } else if (sortBy === 'description_asc') {
+          mock.sort((a, b) => (a.description || '').localeCompare(b.description || ''));
+        } else if (sortBy === 'description_desc') {
+          mock.sort((a, b) => (b.description || '').localeCompare(a.description || ''));
         }
-        const startIndex = (page - 1) * PAGE_SIZE;
-        const pageItems = mock.slice(startIndex, startIndex + PAGE_SIZE);
-        setIncomes(pageItems);
-        setTotalCount(mock.length);
-        setTotalPages(Math.max(1, Math.ceil(mock.length / PAGE_SIZE)));
+
+        const totalMockCount = mock.length;
+        const computedTotalPages = Math.max(1, Math.ceil(totalMockCount / limit));
+        const startIdx = (page - 1) * limit;
+        const pagedMock = mock.slice(startIdx, startIdx + limit);
+
+        setIncomes(pagedMock);
+        setTotalCount(totalMockCount);
+        setTotalPages(computedTotalPages);
       })
-      .finally(() => {
-        setLoading(false);
-        setIsFetching(false);
-      });
-  }, [page, sortColumn, sortDirection, selectedMonth, selectedYear, selectedCategory, search, colDateFilter, colMinAmount, colMaxAmount]);
+      .finally(() => setLoading(false));
+  }, [page, limit, sortBy, selectedMonth, selectedYear, selectedCategory, search, colDateFilter, colMinAmount, colMaxAmount]);
 
   useEffect(() => {
     fetchStats();
     fetchIncomes();
   }, [fetchStats, fetchIncomes]);
-
-  // 3-way toggle per column: ascending -> descending -> normal
-  const handleSort = (column: SortColumn) => {
-    if (sortColumn !== column) {
-      setSortColumn(column);
-      setSortDirection('asc');
-    } else if (sortDirection === 'asc') {
-      setSortDirection('desc');
-    } else {
-      // 3rd click: Reset to normal
-      setSortColumn(null);
-      setSortDirection(null);
-    }
-    setPage(1);
-  };
-
-  // Smooth page change handler
-  const handlePageChange = (newPage: number) => {
-    if (newPage === page || newPage < 1 || newPage > totalPages) return;
-    setPage(newPage);
-    if (tableContainerRef.current) {
-      const rect = tableContainerRef.current.getBoundingClientRect();
-      if (rect.top < 0) {
-        tableContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }
-  };
 
   // Open Add Modal
   const handleOpenAdd = () => {
@@ -292,6 +397,9 @@ export const IncomePage: React.FC = () => {
     setFormDate(new Date().toISOString().split('T')[0]);
     setFormDescription('');
     setFormError('');
+    setIsAddingCustomCategory(false);
+    setCustomCategoryName('');
+    setCustomCategoryError('');
     setIsModalOpen(true);
   };
 
@@ -303,6 +411,9 @@ export const IncomePage: React.FC = () => {
     setFormDate(entry.transaction_date);
     setFormDescription(entry.description || '');
     setFormError('');
+    setIsAddingCustomCategory(false);
+    setCustomCategoryName('');
+    setCustomCategoryError('');
     setIsModalOpen(true);
   };
 
@@ -938,69 +1049,9 @@ export const IncomePage: React.FC = () => {
             )}
           </div>
 
-          {/* Right: Filters & Sorter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            
-            {/* Category Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Filter size={15} color="var(--secondary-text)" />
-              <select
-                value={selectedCategory}
-                onChange={(e) => {
-                  setSelectedCategory(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field"
-                style={{
-                  height: '40px',
-                  width: 'auto',
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  backgroundColor: 'var(--input-bg)',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="all">All Sources</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Active Sort Reset Pill if sorted */}
-            {sortColumn && (
-              <button
-                onClick={() => {
-                  setSortColumn(null);
-                  setSortDirection(null);
-                  setPage(1);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  height: '38px',
-                  padding: '0 12px',
-                  fontSize: '12px',
-                  borderRadius: 'var(--radius-btn)',
-                  border: '1px solid var(--accent)',
-                  backgroundColor: 'var(--light-accent)',
-                  color: 'var(--accent)',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  transition: 'all 0.15s ease'
-                }}
-                title="Click to reset to default sorting (Normal)"
-              >
-                <span>Sorted: {sortColumn.charAt(0).toUpperCase() + sortColumn.slice(1)} ({sortDirection === 'asc' ? 'Ascending' : 'Descending'})</span>
-                <X size={13} />
-              </button>
-            )}
-
-            {/* Total entries indicator chip */}
-            <span className="badge-pill" style={{ height: '38px', padding: '0 14px', fontSize: '12.5px', display: 'inline-flex', alignItems: 'center' }}>
+          {/* Right: Total entries indicator chip */}
+          <div>
+            <span className="badge-pill" style={{ height: '36px', padding: '0 14px', fontSize: '12.5px' }}>
               {totalCount} {totalCount === 1 ? 'entry' : 'entries'}
             </span>
           </div>
@@ -1009,20 +1060,8 @@ export const IncomePage: React.FC = () => {
       </div>
 
       {/* 4. INCOME DATA TABLE */}
-      <div ref={tableContainerRef} className="card-box" style={{ padding: '0', overflow: 'hidden', position: 'relative' }}>
-        {/* Subtle Loading Top Bar */}
-        <div style={{
-          height: '2px',
-          width: '100%',
-          backgroundColor: isFetching ? 'var(--accent)' : 'transparent',
-          transition: 'background-color 0.2s ease',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          zIndex: 10
-        }} />
-
-        <div style={{ overflowX: 'auto', minHeight: '375px' }}>
+      <div className="card-box" style={{ padding: '0', overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13.5px' }}>
             <thead>
               <tr style={{
@@ -1030,112 +1069,18 @@ export const IncomePage: React.FC = () => {
                 borderBottom: '1px solid var(--border)',
                 color: 'var(--secondary-text)'
               }}>
-                {/* Date Header */}
-                <th
-                  onClick={() => handleSort('date')}
-                  style={{
-                    padding: '14px 20px',
-                    fontWeight: 600,
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    color: sortColumn === 'date' ? 'var(--accent)' : 'inherit',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={`Date: ${sortColumn === 'date' ? (sortDirection === 'asc' ? 'Ascending (click for Descending)' : 'Descending (click for Normal)') : 'Click to sort Ascending'}`}
-                >
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Date</span>
-                    {sortColumn === 'date' ? (
-                      sortDirection === 'asc' ? <ChevronUp size={15} strokeWidth={2.5} color="var(--accent)" /> : <ChevronDown size={15} strokeWidth={2.5} color="var(--accent)" />
-                    ) : (
-                      <ArrowUpDown size={13} style={{ opacity: 0.35 }} />
-                    )}
-                  </div>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Date', 'date')}
                 </th>
-
-                {/* Source / Category Header */}
-                <th
-                  onClick={() => handleSort('category')}
-                  style={{
-                    padding: '14px 20px',
-                    fontWeight: 600,
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    color: sortColumn === 'category' ? 'var(--accent)' : 'inherit',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={`Category: ${sortColumn === 'category' ? (sortDirection === 'asc' ? 'Ascending (click for Descending)' : 'Descending (click for Normal)') : 'Click to sort Ascending'}`}
-                >
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Source / Category</span>
-                    {sortColumn === 'category' ? (
-                      sortDirection === 'asc' ? <ChevronUp size={15} strokeWidth={2.5} color="var(--accent)" /> : <ChevronDown size={15} strokeWidth={2.5} color="var(--accent)" />
-                    ) : (
-                      <ArrowUpDown size={13} style={{ opacity: 0.35 }} />
-                    )}
-                  </div>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Source / Category', 'category')}
                 </th>
-
-                {/* Description Header */}
-                <th
-                  onClick={() => handleSort('description')}
-                  style={{
-                    padding: '14px 20px',
-                    fontWeight: 600,
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    color: sortColumn === 'description' ? 'var(--accent)' : 'inherit',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={`Description: ${sortColumn === 'description' ? (sortDirection === 'asc' ? 'Ascending (click for Descending)' : 'Descending (click for Normal)') : 'Click to sort Ascending'}`}
-                >
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Description</span>
-                    {sortColumn === 'description' ? (
-                      sortDirection === 'asc' ? <ChevronUp size={15} strokeWidth={2.5} color="var(--accent)" /> : <ChevronDown size={15} strokeWidth={2.5} color="var(--accent)" />
-                    ) : (
-                      <ArrowUpDown size={13} style={{ opacity: 0.35 }} />
-                    )}
-                  </div>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Description', 'description')}
                 </th>
-
-                {/* Amount Header */}
-                <th
-                  onClick={() => handleSort('amount')}
-                  style={{
-                    padding: '14px 20px',
-                    fontWeight: 600,
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    textAlign: 'right',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    color: sortColumn === 'amount' ? 'var(--accent)' : 'inherit',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={`Amount: ${sortColumn === 'amount' ? (sortDirection === 'asc' ? 'Ascending (click for Descending)' : 'Descending (click for Normal)') : 'Click to sort Ascending'}`}
-                >
-                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                    <span>Amount</span>
-                    {sortColumn === 'amount' ? (
-                      sortDirection === 'asc' ? <ChevronUp size={15} strokeWidth={2.5} color="var(--accent)" /> : <ChevronDown size={15} strokeWidth={2.5} color="var(--accent)" />
-                    ) : (
-                      <ArrowUpDown size={13} style={{ opacity: 0.35 }} />
-                    )}
-                  </div>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>
+                  {renderSortHeader('Amount', 'amount', 'right')}
                 </th>
-
-                {/* Actions Header */}
                 <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', width: '110px' }}>Actions</th>
               </tr>
 
@@ -1288,8 +1233,8 @@ export const IncomePage: React.FC = () => {
                 </th>
               </tr>
             </thead>
-            <tbody style={{ opacity: isFetching ? 0.45 : 1, transition: 'opacity 0.2s ease-in-out' }}>
-              {loading && incomes.length === 0 ? (
+            <tbody>
+              {loading ? (
                 <tr>
                   <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--secondary-text)' }}>
                     Loading income records...
@@ -1441,103 +1386,210 @@ export const IncomePage: React.FC = () => {
         </div>
 
         {/* Pagination Bar */}
-        {totalCount > 0 && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-            padding: '14px 20px',
-            borderTop: '1px solid var(--border)',
-            fontSize: '13px',
-            color: 'var(--secondary-text)',
-            backgroundColor: 'var(--card)'
-          }}>
-            <div>
-              Showing <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{Math.min((page - 1) * PAGE_SIZE + 1, totalCount)}</span> to{' '}
-              <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{Math.min(page * PAGE_SIZE, totalCount)}</span> of{' '}
-              <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{totalCount}</span> entries (6 per page)
-            </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px',
+          borderTop: '1px solid var(--border)',
+          backgroundColor: 'var(--card-subtle)',
+          fontSize: '13px',
+          color: 'var(--secondary-text)',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}>
+          {/* Left: Entries range info & Rows-per-page pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', color: 'var(--secondary-text)', fontWeight: 500 }}>
+              Showing <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>{totalCount === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, totalCount)}</strong> of <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>{totalCount}</strong> entries
+            </span>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {/* Previous Button */}
-              <button
-                disabled={page <= 1}
-                onClick={() => handlePageChange(page - 1)}
-                className="btn-outline"
-                style={{
-                  height: '34px',
-                  padding: '0 12px',
-                  fontSize: '12.5px',
-                  opacity: page <= 1 ? 0.45 : 1,
-                  cursor: page <= 1 ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+            {/* Custom Rows Per Page Pill */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '2px 8px',
+              fontSize: '12.5px',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
+            }}>
+              <span style={{ color: 'var(--secondary-text)', fontWeight: 500 }}>Rows:</span>
+              <CustomSelect
+                value={limit}
+                onChange={(val) => {
+                  setLimit(Number(val));
+                  setPage(1);
                 }}
-              >
-                <ChevronLeft size={15} />
-                <span>Prev</span>
-              </button>
-
-              {/* Numbered Page Buttons */}
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                const isActive = pageNum === page;
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => handlePageChange(pageNum)}
-                    style={{
-                      height: '34px',
-                      minWidth: '34px',
-                      padding: '0 8px',
-                      borderRadius: 'var(--radius-btn)',
-                      fontSize: '12.5px',
-                      fontWeight: isActive ? 700 : 500,
-                      backgroundColor: isActive ? 'var(--accent)' : 'var(--card)',
-                      color: isActive ? '#FFFFFF' : 'var(--main-text)',
-                      border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
-                      cursor: 'pointer',
-                      boxShadow: isActive ? '0 2px 6px rgba(16, 185, 129, 0.3)' : 'none',
-                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.backgroundColor = 'var(--card-subtle)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.backgroundColor = 'var(--card)';
-                    }}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-
-              {/* Next Button */}
-              <button
-                disabled={page >= totalPages}
-                onClick={() => handlePageChange(page + 1)}
-                className="btn-outline"
-                style={{
-                  height: '34px',
-                  padding: '0 12px',
-                  fontSize: '12.5px',
-                  opacity: page >= totalPages ? 0.45 : 1,
-                  cursor: page >= totalPages ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              >
-                <span>Next</span>
-                <ChevronRight size={15} />
-              </button>
+                options={[
+                  { value: 5, label: '5 per page' },
+                  { value: 10, label: '10 per page' },
+                  { value: 20, label: '20 per page' },
+                  { value: 50, label: '50 per page' }
+                ]}
+                size="sm"
+                direction="up"
+                buttonStyle={{ border: 'none', background: 'transparent', height: '28px', fontSize: '12.5px', boxShadow: 'none', padding: '0 4px' }}
+              />
             </div>
           </div>
-        )}
+
+          {/* Right: Page navigation buttons in segment pill */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            backgroundColor: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '3px',
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
+          }}>
+            {/* First Page */}
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(1)}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page <= 1 ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page <= 1 ? 0.35 : 1,
+                cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page > 1) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="First Page"
+            >
+              <ChevronsLeft size={14} />
+            </button>
+
+            {/* Previous Page */}
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page <= 1 ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page <= 1 ? 0.35 : 1,
+                cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page > 1) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="Previous Page"
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            {/* Page Numbers */}
+            {getPageNumbers(page, totalPages).map((pNum, idx) => (
+              typeof pNum === 'number' ? (
+                <button
+                  key={idx}
+                  onClick={() => setPage(pNum)}
+                  style={{
+                    minWidth: '30px',
+                    height: '30px',
+                    padding: '0 8px',
+                    fontSize: '12px',
+                    fontWeight: pNum === page ? 700 : 500,
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: pNum === page ? 'var(--accent)' : 'transparent',
+                    color: pNum === page ? '#FFFFFF' : 'var(--secondary-text)',
+                    cursor: 'pointer',
+                    boxShadow: pNum === page ? '0 1px 3px rgba(16, 185, 129, 0.3)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (pNum !== page) {
+                      e.currentTarget.style.backgroundColor = 'var(--card-subtle)';
+                      e.currentTarget.style.color = 'var(--primary)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (pNum !== page) {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.color = 'var(--secondary-text)';
+                    }
+                  }}
+                >
+                  {pNum}
+                </button>
+              ) : (
+                <span key={idx} style={{ padding: '0 4px', fontSize: '12px', color: 'var(--secondary-text)' }}>
+                  ...
+                </span>
+              )
+            ))}
+
+            {/* Next Page */}
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page >= totalPages ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page >= totalPages ? 0.35 : 1,
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page < totalPages) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="Next Page"
+            >
+              <ChevronRight size={14} />
+            </button>
+
+            {/* Last Page */}
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(totalPages)}
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 'none',
+                background: 'transparent',
+                color: page >= totalPages ? 'var(--secondary-text)' : 'var(--primary)',
+                opacity: page >= totalPages ? 0.35 : 1,
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (page < totalPages) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              title="Last Page"
+            >
+              <ChevronsRight size={14} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 5. ADD / EDIT INCOME MODAL */}
@@ -1624,17 +1676,83 @@ export const IncomePage: React.FC = () => {
 
               {/* Source / Category */}
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                  Income Source / Category *
-                </label>
-                <CustomSelect
-                  value={formCategoryId}
-                  onChange={(val) => setFormCategoryId(String(val))}
-                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                  placeholder="Select category..."
-                  style={{ width: '100%' }}
-                  buttonStyle={{ height: '42px', fontSize: '14px' }}
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--main-text)' }}>
+                    Income Source / Category *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomCategory(!isAddingCustomCategory);
+                      setCustomCategoryError('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--accent)',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Plus size={13} />
+                    <span>{isAddingCustomCategory ? 'Cancel' : '+ Add Custom Category'}</span>
+                  </button>
+                </div>
+
+                {isAddingCustomCategory ? (
+                  <div style={{
+                    backgroundColor: 'var(--card-subtle)',
+                    border: '1px solid var(--accent)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '8px'
+                  }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                      Create Custom Category (Private to your account)
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="text"
+                        placeholder="e.g. YouTube AdSense, Consulting"
+                        value={customCategoryName}
+                        onChange={(e) => setCustomCategoryName(e.target.value)}
+                        className="input-field"
+                        style={{ height: '38px', fontSize: '13.5px', flex: 1 }}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateCustomCategory}
+                        disabled={isCreatingCategory}
+                        className="btn-primary"
+                        style={{ height: '38px', padding: '0 16px', fontSize: '13px' }}
+                      >
+                        {isCreatingCategory ? 'Saving...' : 'Add'}
+                      </button>
+                    </div>
+                    {customCategoryError && (
+                      <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '6px', fontWeight: 500 }}>
+                        {customCategoryError}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <CustomSelect
+                    value={formCategoryId}
+                    onChange={(val) => setFormCategoryId(String(val))}
+                    options={categories.map((c) => ({
+                      value: c.id,
+                      label: `${c.name}${c.user_id ? ' (Custom)' : ''}`
+                    }))}
+                    placeholder="Select category..."
+                    style={{ width: '100%' }}
+                    buttonStyle={{ height: '42px', fontSize: '14px' }}
+                  />
+                )}
               </div>
 
               {/* Date */}
