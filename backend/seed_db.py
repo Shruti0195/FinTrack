@@ -54,9 +54,21 @@ def seed():
             print("Seeding sample transactions...")
             today = date.today()
             sample_txs = [
-                # Income
-                Transaction(user_id=user.id, category_id=cats["Salary"].id, type="income", amount=45000.0, description="September Salary", transaction_date=today - timedelta(days=20)),
-                Transaction(user_id=user.id, category_id=cats["Freelancing"].id, type="income", amount=6500.0, description="Logo Design Project", transaction_date=today - timedelta(days=12)),
+                # Income (14 realistic records for pagination testing)
+                Transaction(user_id=user.id, category_id=cats["Salary"].id, type="income", amount=52000.0, description="Monthly Software Engineering Salary", transaction_date=today - timedelta(days=23)),
+                Transaction(user_id=user.id, category_id=cats["Freelancing"].id, type="income", amount=12500.0, description="E-commerce Website UI Redesign", transaction_date=today - timedelta(days=21)),
+                Transaction(user_id=user.id, category_id=cats["Business"].id, type="income", amount=18000.0, description="Digital Products & Template Sales", transaction_date=today - timedelta(days=19)),
+                Transaction(user_id=user.id, category_id=cats["Interest"].id, type="income", amount=1450.0, description="Quarterly High-Yield Savings Interest", transaction_date=today - timedelta(days=17)),
+                Transaction(user_id=user.id, category_id=cats["Freelancing"].id, type="income", amount=8200.0, description="Brand Identity & Logo Suite", transaction_date=today - timedelta(days=15)),
+                Transaction(user_id=user.id, category_id=cats["Other"].id, type="income", amount=4500.0, description="Sold Old Graphic Tablet", transaction_date=today - timedelta(days=13)),
+                Transaction(user_id=user.id, category_id=cats["Business"].id, type="income", amount=9800.0, description="Consulting Workshop Honorarium", transaction_date=today - timedelta(days=11)),
+                Transaction(user_id=user.id, category_id=cats["Freelancing"].id, type="income", amount=14000.0, description="Mobile App MVP Frontend Development", transaction_date=today - timedelta(days=8)),
+                Transaction(user_id=user.id, category_id=cats["Interest"].id, type="income", amount=2100.0, description="Fixed Deposit Interest Credit", transaction_date=today - timedelta(days=6)),
+                Transaction(user_id=user.id, category_id=cats["Other"].id, type="income", amount=3200.0, description="Cashback Rewards & Referral Bonus", transaction_date=today - timedelta(days=4)),
+                Transaction(user_id=user.id, category_id=cats["Freelancing"].id, type="income", amount=7500.0, description="SEO Optimization & Technical Writing", transaction_date=today - timedelta(days=3)),
+                Transaction(user_id=user.id, category_id=cats["Business"].id, type="income", amount=15500.0, description="SaaS Subscription Revenue Share", transaction_date=today - timedelta(days=2)),
+                Transaction(user_id=user.id, category_id=cats["Salary"].id, type="income", amount=10000.0, description="Quarterly Performance Incentive", transaction_date=today - timedelta(days=1)),
+                Transaction(user_id=user.id, category_id=cats["Other"].id, type="income", amount=2800.0, description="Used Textbook & Gadget Resale", transaction_date=today),
                 # Expenses
                 Transaction(user_id=user.id, category_id=cats["Rent"].id, type="expense", amount=9000.0, payment_method="Bank transfer", description="September Rent", transaction_date=today - timedelta(days=18)),
                 Transaction(user_id=user.id, category_id=cats["Food"].id, type="expense", amount=2100.0, payment_method="UPI", description="Grocery Market", transaction_date=today - timedelta(days=15)),
