@@ -50,6 +50,8 @@ export interface IncomeCategory {
   id: string;
   name: string;
   type: string;
+  is_default?: boolean;
+  user_id?: string | null;
 }
 
 export interface IncomeEntry {
@@ -211,6 +213,40 @@ export const IncomePage: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Custom Category creation state
+  const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customCategoryError, setCustomCategoryError] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  const handleCreateCustomCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customCategoryName.trim()) {
+      setCustomCategoryError('Category name is required.');
+      return;
+    }
+    setIsCreatingCategory(true);
+    setCustomCategoryError('');
+    try {
+      const res = await api.post('/user/income/categories', { name: customCategoryName.trim() });
+      const newCat: IncomeCategory = res.data;
+
+      setCategories((prev) => {
+        if (prev.some((c) => c.id === newCat.id)) return prev;
+        return [...prev, newCat];
+      });
+
+      setFormCategoryId(newCat.id);
+      setCustomCategoryName('');
+      setIsAddingCustomCategory(false);
+      showFeedback(`Custom category "${newCat.name}" added!`, 'success');
+    } catch (err: any) {
+      setCustomCategoryError(err.response?.data?.detail || 'Failed to create custom category.');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
+
   // Fetch categories once
   useEffect(() => {
     api.get('/user/income/categories')
@@ -361,6 +397,9 @@ export const IncomePage: React.FC = () => {
     setFormDate(new Date().toISOString().split('T')[0]);
     setFormDescription('');
     setFormError('');
+    setIsAddingCustomCategory(false);
+    setCustomCategoryName('');
+    setCustomCategoryError('');
     setIsModalOpen(true);
   };
 
@@ -372,6 +411,9 @@ export const IncomePage: React.FC = () => {
     setFormDate(entry.transaction_date);
     setFormDescription(entry.description || '');
     setFormError('');
+    setIsAddingCustomCategory(false);
+    setCustomCategoryName('');
+    setCustomCategoryError('');
     setIsModalOpen(true);
   };
 
@@ -1634,17 +1676,83 @@ export const IncomePage: React.FC = () => {
 
               {/* Source / Category */}
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                  Income Source / Category *
-                </label>
-                <CustomSelect
-                  value={formCategoryId}
-                  onChange={(val) => setFormCategoryId(String(val))}
-                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                  placeholder="Select category..."
-                  style={{ width: '100%' }}
-                  buttonStyle={{ height: '42px', fontSize: '14px' }}
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--main-text)' }}>
+                    Income Source / Category *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomCategory(!isAddingCustomCategory);
+                      setCustomCategoryError('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--accent)',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Plus size={13} />
+                    <span>{isAddingCustomCategory ? 'Cancel' : '+ Add Custom Category'}</span>
+                  </button>
+                </div>
+
+                {isAddingCustomCategory ? (
+                  <div style={{
+                    backgroundColor: 'var(--card-subtle)',
+                    border: '1px solid var(--accent)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '8px'
+                  }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                      Create Custom Category (Private to your account)
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="text"
+                        placeholder="e.g. YouTube AdSense, Consulting"
+                        value={customCategoryName}
+                        onChange={(e) => setCustomCategoryName(e.target.value)}
+                        className="input-field"
+                        style={{ height: '38px', fontSize: '13.5px', flex: 1 }}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateCustomCategory}
+                        disabled={isCreatingCategory}
+                        className="btn-primary"
+                        style={{ height: '38px', padding: '0 16px', fontSize: '13px' }}
+                      >
+                        {isCreatingCategory ? 'Saving...' : 'Add'}
+                      </button>
+                    </div>
+                    {customCategoryError && (
+                      <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '6px', fontWeight: 500 }}>
+                        {customCategoryError}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <CustomSelect
+                    value={formCategoryId}
+                    onChange={(val) => setFormCategoryId(String(val))}
+                    options={categories.map((c) => ({
+                      value: c.id,
+                      label: `${c.name}${c.user_id ? ' (Custom)' : ''}`
+                    }))}
+                    placeholder="Select category..."
+                    style={{ width: '100%' }}
+                    buttonStyle={{ height: '42px', fontSize: '14px' }}
+                  />
+                )}
               </div>
 
               {/* Date */}

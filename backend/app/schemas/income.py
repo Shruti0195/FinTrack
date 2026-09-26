@@ -7,9 +7,15 @@ class IncomeCategoryOut(BaseModel):
     id: uuid.UUID
     name: str
     type: str
+    is_default: bool = True
+    user_id: Optional[uuid.UUID] = None
 
     class Config:
         from_attributes = True
+
+class CustomCategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60, description="Custom category name")
+
 
 class IncomeCreate(BaseModel):
     amount: float = Field(..., gt=0, description="Income amount must be greater than zero")
