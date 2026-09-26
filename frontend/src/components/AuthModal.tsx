@@ -143,13 +143,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }}>
         {/* Header bar */}
         <div style={{
-          backgroundColor: '#0F172A',
+          backgroundColor: 'var(--sidebar-bg)',
           color: '#FFFFFF',
           padding: '20px 24px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderBottom: '1px solid var(--border)'
+          borderBottom: '1px solid rgba(255,255,255,0.08)'
         }}>
           <div>
             <h3 style={{ color: '#FFFFFF', fontSize: '18px', fontWeight: 700 }}>
@@ -157,7 +157,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {mode === 'register' && 'Create Your FinTrack Account'}
               {mode === 'forgot' && 'Reset Your Password'}
             </h3>
-            <p style={{ color: '#94A3B8', fontSize: '13px', marginTop: '2px' }}>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginTop: '2px' }}>
               {mode === 'login' && 'Access your financial dashboard'}
               {mode === 'register' && 'Start tracking income, budgets & health score'}
               {mode === 'forgot' && 'Enter your email to receive a secure reset link'}
@@ -169,13 +169,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#94A3B8',
+              color: 'rgba(255,255,255,0.6)',
               cursor: 'pointer',
               padding: '4px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: '6px'
+              borderRadius: 'var(--radius-btn)'
             }}
           >
             <X size={20} />
@@ -236,7 +236,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               alignItems: 'center',
               gap: '10px',
               padding: '12px 14px',
-              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              backgroundColor: 'var(--light-danger)',
               color: 'var(--danger)',
               borderRadius: '8px',
               fontSize: '13px',
@@ -272,7 +272,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 Full Name
               </label>
               <div style={{ position: 'relative' }}>
-                <UserIcon size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                <UserIcon size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
                 <input
                   type="text"
                   required
@@ -291,7 +291,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               Email Address
             </label>
             <div style={{ position: 'relative' }}>
-              <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+              <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
               <input
                 type="email"
                 required
@@ -310,7 +310,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 Password
               </label>
               <div style={{ position: 'relative' }}>
-                <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
                 <input
                   type="password"
                   required

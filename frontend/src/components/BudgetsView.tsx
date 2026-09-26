@@ -589,7 +589,7 @@ export const BudgetsView: React.FC = () => {
         <div style={{
           padding: '12px 16px',
           borderRadius: 'var(--radius-btn)',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          backgroundColor: 'var(--light-danger)',
           color: 'var(--danger)',
           fontSize: '13.5px',
           fontWeight: 500,
@@ -687,8 +687,8 @@ export const BudgetsView: React.FC = () => {
                   borderRadius: '6px',
                   fontSize: '12px',
                   fontWeight: 600,
-                  backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                  color: '#D97706'
+                  backgroundColor: 'var(--light-warning)',
+                  color: 'var(--warning)'
                 }}>
                   {summary.warning_count} Warning
                 </span>
@@ -697,7 +697,7 @@ export const BudgetsView: React.FC = () => {
                   borderRadius: '6px',
                   fontSize: '12px',
                   fontWeight: 600,
-                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                  backgroundColor: 'var(--light-danger)',
                   color: 'var(--danger)'
                 }}>
                   {summary.exceeded_count} Over
@@ -725,7 +725,7 @@ export const BudgetsView: React.FC = () => {
                 backgroundColor: summary.overall_percentage >= 100 
                   ? 'var(--danger)' 
                   : summary.overall_percentage >= 80 
-                    ? '#F59E0B' 
+                    ? 'var(--warning)' 
                     : 'var(--accent)',
                 borderRadius: '999px',
                 transition: 'width 0.4s ease'
@@ -806,19 +806,19 @@ export const BudgetsView: React.FC = () => {
               const barColor = isOver 
                 ? 'var(--danger)' 
                 : isWarning 
-                  ? '#F59E0B' 
+                  ? 'var(--warning)' 
                   : 'var(--accent)';
 
               const statusBadgeBg = isOver
-                ? 'rgba(239, 68, 68, 0.12)'
+                ? 'var(--light-danger)'
                 : isWarning
-                  ? 'rgba(245, 158, 11, 0.14)'
+                  ? 'var(--light-warning)'
                   : 'var(--light-accent)';
 
               const statusBadgeColor = isOver
                 ? 'var(--danger)'
                 : isWarning
-                  ? '#D97706'
+                  ? 'var(--warning)'
                   : 'var(--accent-hover)';
 
               const statusText = isOver
@@ -1007,7 +1007,7 @@ export const BudgetsView: React.FC = () => {
               <div style={{
                 padding: '10px 14px',
                 borderRadius: 'var(--radius-btn)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                backgroundColor: 'var(--light-danger)',
                 color: 'var(--danger)',
                 fontSize: '12.5px',
                 marginBottom: '16px'
@@ -1156,7 +1156,7 @@ export const BudgetsView: React.FC = () => {
               <div style={{
                 padding: '10px 14px',
                 borderRadius: 'var(--radius-btn)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                backgroundColor: 'var(--light-danger)',
                 color: 'var(--danger)',
                 fontSize: '12.5px',
                 marginBottom: '16px'

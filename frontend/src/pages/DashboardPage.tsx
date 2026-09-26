@@ -471,7 +471,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--danger)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Total Expenses</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
+                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--light-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
                   <ArrowDownRight size={14} />
                 </span>
               </div>
@@ -487,7 +487,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--info)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Savings</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--info)' }}>
+                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--light-info)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--info)' }}>
                   ★
                 </span>
               </div>
@@ -559,10 +559,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               </div>
               <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '12px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)' }}>
-                  <i style={{ width: '8px', height: '8px', background: '#10B981', borderRadius: '2px', display: 'inline-block' }}></i> Income
+                  <i style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px', display: 'inline-block' }}></i> Income
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)' }}>
-                  <i style={{ width: '8px', height: '8px', background: '#EF4444', borderRadius: '2px', display: 'inline-block' }}></i> Expenses
+                  <i style={{ width: '8px', height: '8px', background: 'var(--danger)', borderRadius: '2px', display: 'inline-block' }}></i> Expenses
                 </span>
               </div>
             </div>
@@ -580,7 +580,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                   width: '110px',
                   height: '110px',
                   borderRadius: '50%',
-                  background: 'conic-gradient(#10B981 0 32%, #3B82F6 32% 60%, #F59E0B 60% 72%, #8B5CF6 72% 82%, #64748B 82% 100%)',
+                  background: 'conic-gradient(#10B981 0 32%, #3B82F6 32% 60%, #F59E0B 60% 72%, #3B82F6 72% 82%, #64748B 82% 100%)',
                   position: 'relative',
                   flexShrink: 0
                 }}>
@@ -603,23 +603,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 {/* Legend list */}
                 <div style={{ flex: 1, fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#10B981', borderRadius: '2px', marginRight: '6px' }}></i>Food & Dining (32%)</span>
+                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px', marginRight: '6px' }}></i>Food & Dining (32%)</span>
                     <b>₹13,440</b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#3B82F6', borderRadius: '2px', marginRight: '6px' }}></i>Rent (28%)</span>
+                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--info)', borderRadius: '2px', marginRight: '6px' }}></i>Rent (28%)</span>
                     <b>₹11,760</b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#F59E0B', borderRadius: '2px', marginRight: '6px' }}></i>Transport (12%)</span>
+                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '2px', marginRight: '6px' }}></i>Transport (12%)</span>
                     <b>₹5,040</b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#8B5CF6', borderRadius: '2px', marginRight: '6px' }}></i>Shopping (10%)</span>
+                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--info)', borderRadius: '2px', marginRight: '6px' }}></i>Shopping (10%)</span>
                     <b>₹4,200</b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#64748B', borderRadius: '2px', marginRight: '6px' }}></i>Others (18%)</span>
+                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--secondary-text)', borderRadius: '2px', marginRight: '6px' }}></i>Others (18%)</span>
                     <b>₹7,560</b>
                   </div>
                 </div>
@@ -659,7 +659,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               {/* Row 2 */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
                     <ArrowDownRight size={16} />
                   </div>
                   <div>
@@ -675,7 +675,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               {/* Row 3 */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
                     <ArrowDownRight size={16} />
                   </div>
                   <div>
@@ -738,7 +738,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               width: '52px',
               height: '52px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              backgroundColor: 'var(--light-danger)',
               color: 'var(--danger)',
               display: 'flex',
               alignItems: 'center',
