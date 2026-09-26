@@ -5,8 +5,8 @@ import uuid
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse, Response
-from sqlalchemy import func, extract, desc, asc, cast, String
+from fastapi.responses import Response
+from sqlalchemy import func, extract, desc, asc
 from sqlalchemy.orm import Session
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -18,50 +18,50 @@ from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.category import Category
-from app.schemas.income import (
-    IncomeCategoryOut,
-    IncomeCreate,
-    IncomeUpdate,
-    IncomeOut,
-    IncomeListResponse,
-    IncomeStatsResponse,
-    IncomeCategoryShare,
+from app.schemas.expense import (
+    ExpenseCategoryOut,
+    ExpenseCreate,
+    ExpenseUpdate,
+    ExpenseOut,
+    ExpenseListResponse,
+    ExpenseStatsResponse,
+    ExpenseCategoryShare,
 )
 from app.schemas.user import MessageResponse
 
 router = APIRouter()
 
-@router.get("/categories", response_model=list[IncomeCategoryOut])
-def get_income_categories(
+@router.get("/categories", response_model=list[ExpenseCategoryOut])
+def get_expense_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Get all active income categories (e.g. Salary, Freelancing, Business, Interest, Other).
+    Get all active expense categories (e.g. Food, Rent, Transport, Shopping, Bills, etc.).
     """
     categories = (
         db.query(Category)
-        .filter(Category.type == "income", Category.is_active == True)
+        .filter(Category.type == "expense", Category.is_active == True)
         .order_by(Category.name.asc())
         .all()
     )
     return categories
 
 
-@router.get("/stats", response_model=IncomeStatsResponse)
-def get_income_stats(
+@router.get("/stats", response_model=ExpenseStatsResponse)
+def get_expense_stats(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Calculates summary KPIs and breakdown for income:
-    - Total income for selected month (defaults to current month)
-    - Total income for previous month
-    - Month-over-month growth percentage
-    - Number of entries and average amount per entry
-    - Top earning category/source
+    Calculates summary KPIs and breakdown for expenses:
+    - Total expenses for selected month (defaults to current month)
+    - Total expenses for previous month
+    - Month-over-month change percentage
+    - Number of entries and average expense per entry
+    - Top spending category
     - Distribution by category
     """
     today = date.today()
@@ -83,7 +83,7 @@ def get_income_stats(
         )
         .filter(
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
             extract("month", Transaction.transaction_date) == target_month,
             extract("year", Transaction.transaction_date) == target_year,
         )
@@ -97,7 +97,7 @@ def get_income_stats(
         db.query(func.coalesce(func.sum(Transaction.amount), 0.0).label("total"))
         .filter(
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
             extract("month", Transaction.transaction_date) == prev_month,
             extract("year", Transaction.transaction_date) == prev_year,
         )
@@ -113,7 +113,7 @@ def get_income_stats(
     else:
         mom_change = 0.0
 
-    avg_income = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
+    avg_expense = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
 
     # Breakdown by category for current month
     cat_breakdown_raw = (
@@ -129,7 +129,7 @@ def get_income_stats(
         )
         .filter(
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
             extract("month", Transaction.transaction_date) == target_month,
             extract("year", Transaction.transaction_date) == target_year,
         )
@@ -138,20 +138,20 @@ def get_income_stats(
         .all()
     )
 
-    category_breakdown: list[IncomeCategoryShare] = []
-    top_source_name = None
-    top_source_amount = 0.0
-    top_source_pct = 0.0
+    category_breakdown: list[ExpenseCategoryShare] = []
+    top_cat_name = None
+    top_cat_amount = 0.0
+    top_cat_pct = 0.0
 
     for idx, row in enumerate(cat_breakdown_raw):
         cat_amt = float(row.cat_total)
         cat_pct = round((cat_amt / total_this_month) * 100, 1) if total_this_month > 0 else 0.0
         if idx == 0:
-            top_source_name = row.cat_name
-            top_source_amount = cat_amt
-            top_source_pct = cat_pct
+            top_cat_name = row.cat_name
+            top_cat_amount = cat_amt
+            top_cat_pct = cat_pct
         category_breakdown.append(
-            IncomeCategoryShare(
+            ExpenseCategoryShare(
                 category_id=row.cat_id,
                 category_name=row.cat_name,
                 total_amount=cat_amt,
@@ -160,90 +160,91 @@ def get_income_stats(
             )
         )
 
-    return IncomeStatsResponse(
-        total_income_this_month=total_this_month,
-        total_income_last_month=total_last_month,
+    return ExpenseStatsResponse(
+        total_expense_this_month=total_this_month,
+        total_expense_last_month=total_last_month,
         month_over_month_change_pct=mom_change,
         entries_count_this_month=count_this_month,
-        avg_income_per_entry=avg_income,
-        top_source_name=top_source_name,
-        top_source_amount=top_source_amount,
-        top_source_percentage=top_source_pct,
+        avg_expense_per_entry=avg_expense,
+        top_category_name=top_cat_name,
+        top_category_amount=top_cat_amount,
+        top_category_percentage=top_cat_pct,
         category_breakdown=category_breakdown,
     )
 
 
-def generate_income_pdf(
+def generate_expense_pdf(
     user_name: str,
     user_email: str,
     period_label: str,
     total_amount: float,
     entries_count: int,
-    top_source: str,
+    top_category: str,
     transactions: list,
 ) -> bytes:
+    """
+    Generates a PDF statement for expense transactions using ReportLab.
+    Matches FinTrack brand design guidelines.
+    """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,
-        rightMargin=36,
         leftMargin=36,
+        rightMargin=36,
         topMargin=36,
         bottomMargin=36,
     )
+
     styles = getSampleStyleSheet()
 
+    # Typography & Colors
     title_style = ParagraphStyle(
         'DocTitle',
-        parent=styles['Heading1'],
         fontName='Helvetica-Bold',
         fontSize=20,
         leading=24,
         textColor=colors.HexColor('#0F172A'),
-        spaceAfter=4,
     )
     subtitle_style = ParagraphStyle(
         'DocSubtitle',
-        parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=10,
-        leading=14,
+        fontSize=9.5,
+        leading=13,
         textColor=colors.HexColor('#64748B'),
-        spaceAfter=12,
     )
     meta_style = ParagraphStyle(
-        'DocMeta',
-        parent=styles['Normal'],
+        'MetaText',
         fontName='Helvetica',
-        fontSize=9,
-        leading=13,
+        fontSize=8.5,
+        leading=12,
         textColor=colors.HexColor('#334155'),
     )
     kpi_title_style = ParagraphStyle(
         'KPITitle',
         fontName='Helvetica-Bold',
-        fontSize=8,
+        fontSize=7.5,
         leading=10,
         textColor=colors.HexColor('#64748B'),
     )
     kpi_val_style = ParagraphStyle(
         'KPIVal',
         fontName='Helvetica-Bold',
-        fontSize=13,
-        leading=16,
+        fontSize=12,
+        leading=15,
         textColor=colors.HexColor('#0F172A'),
     )
-    kpi_accent_val_style = ParagraphStyle(
-        'KPIAccentVal',
+    kpi_danger_val_style = ParagraphStyle(
+        'KPIDangerVal',
         fontName='Helvetica-Bold',
-        fontSize=13,
-        leading=16,
-        textColor=colors.HexColor('#10B981'),
+        fontSize=12,
+        leading=15,
+        textColor=colors.HexColor('#EF4444'),
     )
     table_header_style = ParagraphStyle(
         'TH',
         fontName='Helvetica-Bold',
-        fontSize=9,
+        fontSize=8.5,
         leading=11,
         textColor=colors.white,
     )
@@ -260,14 +261,14 @@ def generate_income_pdf(
         fontSize=8.5,
         leading=11,
         alignment=2,
-        textColor=colors.HexColor('#10B981'),
+        textColor=colors.HexColor('#EF4444'),
     )
 
     story = []
 
     # Title & Header
-    story.append(Paragraph('FinTrack — Income Statement', title_style))
-    story.append(Paragraph('Personal revenue streams & inflow audit report', subtitle_style))
+    story.append(Paragraph('FinTrack — Expense Statement', title_style))
+    story.append(Paragraph('Detailed spending audit & outflow analysis report', subtitle_style))
     story.append(Spacer(1, 4))
 
     # Meta Section
@@ -289,10 +290,10 @@ def generate_income_pdf(
     avg_amount = (total_amount / entries_count) if entries_count > 0 else 0.0
     kpi_data = [
         [
-            [Paragraph('TOTAL INFLOW', kpi_title_style), Spacer(1, 3), Paragraph(f'Rs. {total_amount:,.2f}', kpi_accent_val_style)],
-            [Paragraph('RECORDED INFLOWS', kpi_title_style), Spacer(1, 3), Paragraph(f'{entries_count} entries', kpi_val_style)],
-            [Paragraph('AVERAGE INFLOW', kpi_title_style), Spacer(1, 3), Paragraph(f'Rs. {avg_amount:,.2f}', kpi_val_style)],
-            [Paragraph('TOP STREAM', kpi_title_style), Spacer(1, 3), Paragraph(f'{top_source}', kpi_val_style)],
+            [Paragraph('TOTAL OUTFLOW', kpi_title_style), Spacer(1, 3), Paragraph(f'Rs. {total_amount:,.2f}', kpi_danger_val_style)],
+            [Paragraph('RECORDED EXPENSES', kpi_title_style), Spacer(1, 3), Paragraph(f'{entries_count} entries', kpi_val_style)],
+            [Paragraph('AVERAGE EXPENSE', kpi_title_style), Spacer(1, 3), Paragraph(f'Rs. {avg_amount:,.2f}', kpi_val_style)],
+            [Paragraph('TOP CATEGORY', kpi_title_style), Spacer(1, 3), Paragraph(f'{top_category}', kpi_val_style)],
         ]
     ]
     kpi_table = Table(kpi_data, colWidths=[135, 135, 135, 135])
@@ -312,7 +313,8 @@ def generate_income_pdf(
     table_rows = [
         [
             Paragraph('Date', table_header_style),
-            Paragraph('Source / Category', table_header_style),
+            Paragraph('Category', table_header_style),
+            Paragraph('Method', table_header_style),
             Paragraph('Description', table_header_style),
             Paragraph('Amount (INR)', ParagraphStyle('THRight', parent=table_header_style, alignment=2)),
         ]
@@ -322,22 +324,24 @@ def generate_income_pdf(
         table_rows.append([
             Paragraph(tx.transaction_date.strftime('%d %b %Y'), table_cell_style),
             Paragraph(cat_name, table_cell_style),
+            Paragraph(tx.payment_method or 'UPI', table_cell_style),
             Paragraph(tx.description or '—', table_cell_style),
-            Paragraph(f'+Rs. {float(tx.amount):,.2f}', table_amount_style),
+            Paragraph(f'-Rs. {float(tx.amount):,.2f}', table_amount_style),
         ])
 
     if len(transactions) == 0:
         table_rows.append([
-            Paragraph('No income transactions recorded for this period.', table_cell_style),
+            Paragraph('No expense transactions recorded for this period.', table_cell_style),
+            Paragraph('—', table_cell_style),
             Paragraph('—', table_cell_style),
             Paragraph('—', table_cell_style),
             Paragraph('Rs. 0.00', table_amount_style),
         ])
 
-    txn_table = Table(table_rows, colWidths=[85, 115, 220, 120])
+    txn_table = Table(table_rows, colWidths=[80, 100, 75, 175, 110])
     table_style_commands = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F172A')),
-        ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
+        ('ALIGN', (4, 0), (4, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
@@ -368,7 +372,7 @@ def generate_income_pdf(
 
 
 @router.get("/export")
-def export_income(
+def export_expense(
     format: str = Query("csv", regex="^(csv|pdf)$"),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
@@ -377,7 +381,7 @@ def export_income(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Exports filtered income transactions as either a downloadable CSV or PDF document.
+    Exports filtered expense transactions as either a downloadable CSV or PDF document.
     """
     query = (
         db.query(Transaction, Category.name.label("category_name"))
@@ -387,7 +391,7 @@ def export_income(
         )
         .filter(
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
         )
     )
 
@@ -400,7 +404,6 @@ def export_income(
 
     results = query.order_by(desc(Transaction.transaction_date)).all()
 
-    # Determine period label
     month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     if month and year:
         period_label = f"{month_names[month]} {year}"
@@ -414,41 +417,41 @@ def export_income(
         cat_counts: dict[str, float] = {}
         for tx, cat_name in results:
             cat_counts[cat_name] = cat_counts.get(cat_name, 0.0) + float(tx.amount)
-        top_source = max(cat_counts, key=cat_counts.get) if cat_counts else "None"
+        top_cat = max(cat_counts, key=cat_counts.get) if cat_counts else "None"
 
-        pdf_bytes = generate_income_pdf(
+        pdf_bytes = generate_expense_pdf(
             user_name=current_user.name,
             user_email=current_user.email,
             period_label=period_label,
             total_amount=total_amt,
             entries_count=len(results),
-            top_source=top_source,
+            top_category=top_cat,
             transactions=results,
         )
 
-        filename = f"fintrack_income_{year or 'all'}_{month or 'all'}.pdf"
+        filename = f"fintrack_expenses_{year or 'all'}_{month or 'all'}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
-    # Otherwise CSV
+    # CSV output
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Date", "Source/Category", "Description", "Amount (INR)", "Payment Method"])
+    writer.writerow(["Date", "Category", "Description", "Payment Method", "Amount (INR)"])
 
     for tx, cat_name in results:
         writer.writerow([
             tx.transaction_date.strftime("%Y-%m-%d"),
             cat_name,
             tx.description or "",
+            tx.payment_method or "UPI",
             f"{float(tx.amount):.2f}",
-            tx.payment_method or "N/A",
         ])
 
     output.seek(0)
-    filename = f"fintrack_income_{year or 'all'}_{month or 'all'}.csv"
+    filename = f"fintrack_expenses_{year or 'all'}_{month or 'all'}.csv"
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
@@ -457,7 +460,7 @@ def export_income(
 
 
 @router.get("/export/pdf")
-def export_income_pdf_direct(
+def export_expense_pdf_direct(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
     category_id: Optional[uuid.UUID] = None,
@@ -465,11 +468,11 @@ def export_income_pdf_direct(
     current_user: User = Depends(get_current_user),
 ):
     """Direct alias for PDF export."""
-    return export_income(format="pdf", month=month, year=year, category_id=category_id, db=db, current_user=current_user)
+    return export_expense(format="pdf", month=month, year=year, category_id=category_id, db=db, current_user=current_user)
 
 
 @router.get("/export/csv")
-def export_income_csv_direct(
+def export_expense_csv_direct(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
     category_id: Optional[uuid.UUID] = None,
@@ -477,27 +480,24 @@ def export_income_csv_direct(
     current_user: User = Depends(get_current_user),
 ):
     """Direct alias for CSV export."""
-    return export_income(format="csv", month=month, year=year, category_id=category_id, db=db, current_user=current_user)
+    return export_expense(format="csv", month=month, year=year, category_id=category_id, db=db, current_user=current_user)
 
 
-@router.get("", response_model=IncomeListResponse)
-def list_income(
+@router.get("", response_model=ExpenseListResponse)
+def list_expenses(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
     category_id: Optional[uuid.UUID] = None,
     search: Optional[str] = None,
-    min_amount: Optional[float] = Query(None, ge=0),
-    max_amount: Optional[float] = Query(None, ge=0),
-    date: Optional[str] = None,
     sort_by: Optional[str] = Query("date_desc"),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(6, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    List income transactions with filtering (month, year, category, search, min/max amount, date),
-    sorting (date, amount), and pagination.
+    List expense transactions with filtering (month, year, category, search),
+    sorting (date, amount, category, description), and pagination (defaults to 6 items/page).
     """
     query = (
         db.query(Transaction, Category.name.label("category_name"))
@@ -507,7 +507,7 @@ def list_income(
         )
         .filter(
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
         )
     )
 
@@ -520,16 +520,11 @@ def list_income(
     if search:
         s = f"%{search.strip().lower()}%"
         query = query.filter(
-            func.lower(Transaction.description).like(s) | func.lower(Category.name).like(s)
+            func.lower(Transaction.description).like(s)
+            | func.lower(Category.name).like(s)
+            | func.lower(Transaction.payment_method).like(s)
         )
-    if min_amount is not None:
-        query = query.filter(Transaction.amount >= min_amount)
-    if max_amount is not None:
-        query = query.filter(Transaction.amount <= max_amount)
-    if date:
-        query = query.filter(cast(Transaction.transaction_date, String).like(f"{date}%"))
 
-    # Calculate total matching count and sum
     total_count = query.count()
 
     total_amount_scalar = (
@@ -537,7 +532,7 @@ def list_income(
     )
     total_amount = float(total_amount_scalar) if total_amount_scalar else 0.0
 
-    # Sorting
+    # Column-wise sorting
     if sort_by == "date_asc":
         query = query.order_by(asc(Transaction.transaction_date), asc(Transaction.created_at))
     elif sort_by == "date_desc":
@@ -554,20 +549,20 @@ def list_income(
         query = query.order_by(asc(Transaction.description), desc(Transaction.transaction_date))
     elif sort_by == "description_desc":
         query = query.order_by(desc(Transaction.description), desc(Transaction.transaction_date))
-    else:  # default date_desc
+    else:  # default normal sort: newest first
         query = query.order_by(desc(Transaction.transaction_date), desc(Transaction.created_at))
 
-    # Pagination
     offset = (page - 1) * limit
     results = query.offset(offset).limit(limit).all()
 
     items = [
-        IncomeOut(
+        ExpenseOut(
             id=tx.id,
             amount=float(tx.amount),
             category_id=tx.category_id,
             category_name=cat_name,
             description=tx.description,
+            payment_method=tx.payment_method or "UPI",
             transaction_date=tx.transaction_date,
             created_at=tx.created_at,
         )
@@ -576,7 +571,7 @@ def list_income(
 
     total_pages = max(1, math.ceil(total_count / limit))
 
-    return IncomeListResponse(
+    return ExpenseListResponse(
         items=items,
         total_count=total_count,
         total_amount=total_amount,
@@ -586,21 +581,21 @@ def list_income(
     )
 
 
-@router.post("", response_model=IncomeOut, status_code=status.HTTP_201_CREATED)
-def create_income(
-    income_in: IncomeCreate,
+@router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
+def create_expense(
+    expense_in: ExpenseCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Log a new income transaction.
-    Verifies that the category exists, is active, and is of type 'income'.
+    Log a new expense transaction.
+    Verifies that the category exists, is active, and is of type 'expense'.
     """
     category = (
         db.query(Category)
         .filter(
-            Category.id == income_in.category_id,
-            Category.type == "income",
+            Category.id == expense_in.category_id,
+            Category.type == "expense",
             Category.is_active == True,
         )
         .first()
@@ -608,40 +603,43 @@ def create_income(
     if not category:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid category selected. Category must be an active income category.",
+            detail="Category not found or is not a valid active expense category.",
         )
 
-    tx = Transaction(
+    transaction = Transaction(
         user_id=current_user.id,
-        category_id=income_in.category_id,
-        type="income",
-        amount=income_in.amount,
-        description=income_in.description.strip() if income_in.description else None,
-        transaction_date=income_in.transaction_date,
+        category_id=expense_in.category_id,
+        type="expense",
+        amount=expense_in.amount,
+        description=expense_in.description,
+        payment_method=expense_in.payment_method or "UPI",
+        transaction_date=expense_in.transaction_date,
     )
-    db.add(tx)
+
+    db.add(transaction)
     db.commit()
-    db.refresh(tx)
+    db.refresh(transaction)
 
-    return IncomeOut(
-        id=tx.id,
-        amount=float(tx.amount),
-        category_id=tx.category_id,
+    return ExpenseOut(
+        id=transaction.id,
+        amount=float(transaction.amount),
+        category_id=transaction.category_id,
         category_name=category.name,
-        description=tx.description,
-        transaction_date=tx.transaction_date,
-        created_at=tx.created_at,
+        description=transaction.description,
+        payment_method=transaction.payment_method or "UPI",
+        transaction_date=transaction.transaction_date,
+        created_at=transaction.created_at,
     )
 
 
-@router.get("/{income_id}", response_model=IncomeOut)
-def get_income_entry(
-    income_id: uuid.UUID,
+@router.get("/{expense_id}", response_model=ExpenseOut)
+def get_expense(
+    expense_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Retrieve single income transaction by ID.
+    Fetch a single expense transaction by ID.
     """
     result = (
         db.query(Transaction, Category.name.label("category_name"))
@@ -650,113 +648,128 @@ def get_income_entry(
             (Transaction.category_id == Category.id) & (Transaction.type == Category.type),
         )
         .filter(
-            Transaction.id == income_id,
+            Transaction.id == expense_id,
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
         )
         .first()
     )
+
     if not result:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Income entry not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense transaction not found.",
+        )
 
     tx, cat_name = result
-    return IncomeOut(
+    return ExpenseOut(
         id=tx.id,
         amount=float(tx.amount),
         category_id=tx.category_id,
         category_name=cat_name,
         description=tx.description,
+        payment_method=tx.payment_method or "UPI",
         transaction_date=tx.transaction_date,
         created_at=tx.created_at,
     )
 
 
-@router.put("/{income_id}", response_model=IncomeOut)
-def update_income(
-    income_id: uuid.UUID,
-    income_in: IncomeUpdate,
+@router.put("/{expense_id}", response_model=ExpenseOut)
+def update_expense(
+    expense_id: uuid.UUID,
+    expense_in: ExpenseUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Update an existing income transaction.
+    Update an existing expense transaction.
     """
-    tx = (
+    transaction = (
         db.query(Transaction)
         .filter(
-            Transaction.id == income_id,
+            Transaction.id == expense_id,
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
         )
         .first()
     )
-    if not tx:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Income entry not found.")
 
-    if income_in.category_id is not None:
-        cat = (
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense transaction not found.",
+        )
+
+    if expense_in.category_id is not None:
+        category = (
             db.query(Category)
             .filter(
-                Category.id == income_in.category_id,
-                Category.type == "income",
+                Category.id == expense_in.category_id,
+                Category.type == "expense",
                 Category.is_active == True,
             )
             .first()
         )
-        if not cat:
+        if not category:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Selected category must be an active income category.",
+                detail="Category not found or is not a valid active expense category.",
             )
-        tx.category_id = income_in.category_id
+        transaction.category_id = expense_in.category_id
 
-    if income_in.amount is not None:
-        tx.amount = income_in.amount
-    if income_in.transaction_date is not None:
-        tx.transaction_date = income_in.transaction_date
-    if income_in.description is not None:
-        tx.description = income_in.description.strip() or None
+    if expense_in.amount is not None:
+        transaction.amount = expense_in.amount
+    if expense_in.description is not None:
+        transaction.description = expense_in.description
+    if expense_in.payment_method is not None:
+        transaction.payment_method = expense_in.payment_method
+    if expense_in.transaction_date is not None:
+        transaction.transaction_date = expense_in.transaction_date
 
-    db.add(tx)
     db.commit()
-    db.refresh(tx)
+    db.refresh(transaction)
 
-    category = db.query(Category).filter(Category.id == tx.category_id).first()
-    cat_name = category.name if category else "Income"
+    cat = db.query(Category).filter(Category.id == transaction.category_id).first()
+    cat_name = cat.name if cat else "Unknown"
 
-    return IncomeOut(
-        id=tx.id,
-        amount=float(tx.amount),
-        category_id=tx.category_id,
+    return ExpenseOut(
+        id=transaction.id,
+        amount=float(transaction.amount),
+        category_id=transaction.category_id,
         category_name=cat_name,
-        description=tx.description,
-        transaction_date=tx.transaction_date,
-        created_at=tx.created_at,
+        description=transaction.description,
+        payment_method=transaction.payment_method or "UPI",
+        transaction_date=transaction.transaction_date,
+        created_at=transaction.created_at,
     )
 
 
-@router.delete("/{income_id}", response_model=MessageResponse)
-def delete_income(
-    income_id: uuid.UUID,
+@router.delete("/{expense_id}", response_model=MessageResponse)
+def delete_expense(
+    expense_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Delete an income transaction.
+    Delete an expense transaction.
     """
-    tx = (
+    transaction = (
         db.query(Transaction)
         .filter(
-            Transaction.id == income_id,
+            Transaction.id == expense_id,
             Transaction.user_id == current_user.id,
-            Transaction.type == "income",
+            Transaction.type == "expense",
         )
         .first()
     )
-    if not tx:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Income entry not found.")
 
-    db.delete(tx)
+    if not transaction:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense transaction not found.",
+        )
+
+    db.delete(transaction)
     db.commit()
 
-    return MessageResponse(message="Income entry deleted successfully.", success=True)
+    return MessageResponse(message="Expense transaction deleted successfully")

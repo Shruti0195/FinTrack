@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   TrendingUp, 
   LayoutDashboard, 
@@ -14,15 +14,18 @@ import {
   LogOut, 
   Sun, 
   Moon,
-  ArrowUpRight,
-  ArrowDownRight,
   Sparkles,
-  PlusCircle
+  PlusCircle,
+  Calendar,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
 import { IncomePage } from './IncomePage';
+import { ExpensePage } from './ExpensePage';
 import { BudgetsView } from '../components/BudgetsView';
+import { DashboardView } from '../components/DashboardView';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -39,6 +42,44 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [user, setUser] = useState<UserProfile | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // Period filter states: Monthly, Quarterly, Half Year, Year (defaults to Apr 2026 as per user specification)
+  const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'half_year' | 'yearly'>('monthly');
+  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedMonth, setSelectedMonth] = useState<number>(4); // April 2026
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(2); // Q2 2026
+  const [selectedHalf, setSelectedHalf] = useState<number>(1); // H1 2026
+  const [showPeriodMenu, setShowPeriodMenu] = useState<boolean>(false);
+  const periodMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close period dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (periodMenuRef.current && !periodMenuRef.current.contains(e.target as Node)) {
+        setShowPeriodMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const monthsShort = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthsList = [
+    { val: 1, label: 'Jan' }, { val: 2, label: 'Feb' }, { val: 3, label: 'Mar' }, { val: 4, label: 'Apr' },
+    { val: 5, label: 'May' }, { val: 6, label: 'Jun' }, { val: 7, label: 'Jul' }, { val: 8, label: 'Aug' },
+    { val: 9, label: 'Sep' }, { val: 10, label: 'Oct' }, { val: 11, label: 'Nov' }, { val: 12, label: 'Dec' },
+  ];
+
+  let periodLabel = `${monthsShort[selectedMonth]} ${selectedYear}`;
+  if (periodType === 'quarterly') {
+    const qLabels = ['', 'Jan - Mar', 'Apr - Jun', 'Jul - Sep', 'Oct - Dec'];
+    periodLabel = `Q${selectedQuarter} ${selectedYear} (${qLabels[selectedQuarter]})`;
+  } else if (periodType === 'half_year') {
+    const hLabels = ['', 'Jan - Jun', 'Jul - Dec'];
+    periodLabel = `H${selectedHalf} ${selectedYear} (${hLabels[selectedHalf]})`;
+  } else if (periodType === 'yearly') {
+    periodLabel = `Year ${selectedYear}`;
+  }
 
   useEffect(() => {
     // Fetch logged in user details
@@ -345,18 +386,284 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
 
           {/* Right Header Tools */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {/* Month Picker */}
-            <span style={{
-              fontSize: '12.5px',
-              padding: '7px 12px',
-              backgroundColor: 'var(--card-subtle)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--main-text)',
-              fontWeight: 500
-            }}>
-              📅 Apr 2026 ▾
-            </span>
+            {/* Header Period Filter Dropdown: Monthly, Quarterly, Half Year, Year (defaults to Apr 2026) */}
+            <div style={{ position: 'relative' }} ref={periodMenuRef}>
+              <button
+                onClick={() => setShowPeriodMenu((prev) => !prev)}
+                style={{
+                  height: '38px',
+                  padding: '0 12px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  backgroundColor: showPeriodMenu ? 'var(--light-accent)' : 'var(--card-subtle)',
+                  border: `1px solid ${showPeriodMenu ? 'var(--accent)' : 'var(--border)'}`,
+                  color: showPeriodMenu ? 'var(--accent)' : 'var(--main-text)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  borderRadius: 'var(--radius-btn)',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Filter by Monthly, Quarterly, Half Year, or Year"
+              >
+                <Calendar size={15} color={showPeriodMenu ? 'var(--accent)' : 'var(--secondary-text)'} />
+                <span>{periodLabel}</span>
+                <ChevronDown
+                  size={14}
+                  style={{
+                    transform: showPeriodMenu ? 'rotate(180deg)' : 'none',
+                    transition: 'transform 0.15s ease'
+                  }}
+                />
+              </button>
+
+              {/* Floating Period Filter Popover */}
+              {showPeriodMenu && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  right: 0,
+                  width: '320px',
+                  backgroundColor: 'var(--card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-card)',
+                  boxShadow: 'var(--shadow-lg)',
+                  padding: '16px',
+                  zIndex: 100,
+                  animation: 'fadeIn 0.15s ease'
+                }}>
+                  {/* Period Mode Selector Tabs */}
+                  <div style={{
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color: 'var(--secondary-text)',
+                    fontWeight: 700,
+                    marginBottom: '8px'
+                  }}>
+                    Select Period View
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '4px',
+                    backgroundColor: 'var(--card-subtle)',
+                    padding: '3px',
+                    borderRadius: '8px',
+                    marginBottom: '14px',
+                    border: '1px solid var(--border)'
+                  }}>
+                    {[
+                      { id: 'monthly', label: 'Monthly' },
+                      { id: 'quarterly', label: 'Quarterly' },
+                      { id: 'half_year', label: 'Half Year' },
+                      { id: 'yearly', label: 'Year' }
+                    ].map((tab) => {
+                      const isActive = periodType === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setPeriodType(tab.id as any)}
+                          style={{
+                            padding: '6px 2px',
+                            fontSize: '11px',
+                            fontWeight: isActive ? 700 : 500,
+                            backgroundColor: isActive ? 'var(--accent)' : 'transparent',
+                            color: isActive ? '#FFFFFF' : 'var(--secondary-text)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            textAlign: 'center'
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Year Selector */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '12px',
+                    paddingBottom: '10px',
+                    borderBottom: '1px solid var(--border)'
+                  }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--secondary-text)' }}>Year</span>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {[2024, 2025, 2026, 2027].map((yr) => (
+                        <button
+                          key={yr}
+                          onClick={() => setSelectedYear(yr)}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '11.5px',
+                            fontWeight: selectedYear === yr ? 700 : 500,
+                            backgroundColor: selectedYear === yr ? 'var(--accent)' : 'var(--card-subtle)',
+                            color: selectedYear === yr ? '#FFFFFF' : 'var(--main-text)',
+                            border: `1px solid ${selectedYear === yr ? 'var(--accent)' : 'var(--border)'}`,
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {yr}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sub-period Picker based on mode */}
+                  {periodType === 'monthly' && (
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
+                        Select Month (4x3 Grid)
+                      </div>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: '6px'
+                      }}>
+                        {monthsList.map((m) => {
+                          const isSel = selectedMonth === m.val;
+                          return (
+                            <button
+                              key={m.val}
+                              onClick={() => {
+                                setSelectedMonth(m.val);
+                                setShowPeriodMenu(false);
+                              }}
+                              style={{
+                                padding: '8px 4px',
+                                fontSize: '11.5px',
+                                fontWeight: isSel ? 700 : 500,
+                                backgroundColor: isSel ? 'var(--accent)' : 'var(--card-subtle)',
+                                color: isSel ? '#FFFFFF' : 'var(--main-text)',
+                                border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {m.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {periodType === 'quarterly' && (
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
+                        Select Quarter
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                        {[
+                          { q: 1, label: 'Q1', desc: 'Jan – Mar' },
+                          { q: 2, label: 'Q2', desc: 'Apr – Jun' },
+                          { q: 3, label: 'Q3', desc: 'Jul – Sep' },
+                          { q: 4, label: 'Q4', desc: 'Oct – Dec' },
+                        ].map((item) => {
+                          const isSel = selectedQuarter === item.q;
+                          return (
+                            <button
+                              key={item.q}
+                              onClick={() => {
+                                setSelectedQuarter(item.q);
+                                setShowPeriodMenu(false);
+                              }}
+                              style={{
+                                padding: '10px 8px',
+                                textAlign: 'left',
+                                backgroundColor: isSel ? 'var(--light-accent)' : 'var(--card-subtle)',
+                                border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+                                borderRadius: '6px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ fontSize: '13px', fontWeight: 700, color: isSel ? 'var(--accent)' : 'var(--primary)' }}>
+                                {item.label}
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: 'var(--secondary-text)' }}>
+                                {item.desc}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {periodType === 'half_year' && (
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
+                        Select Half Year
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[
+                          { h: 1, label: 'H1: First Half', desc: 'January – June (6 Months)' },
+                          { h: 2, label: 'H2: Second Half', desc: 'July – December (6 Months)' },
+                        ].map((item) => {
+                          const isSel = selectedHalf === item.h;
+                          return (
+                            <button
+                              key={item.h}
+                              onClick={() => {
+                                setSelectedHalf(item.h);
+                                setShowPeriodMenu(false);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '10px 12px',
+                                backgroundColor: isSel ? 'var(--light-accent)' : 'var(--card-subtle)',
+                                border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+                                borderRadius: '6px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: 700, color: isSel ? 'var(--accent)' : 'var(--primary)' }}>
+                                  {item.label}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>
+                                  {item.desc}
+                                </div>
+                              </div>
+                              {isSel && <Check size={16} color="var(--accent)" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {periodType === 'yearly' && (
+                    <div style={{ padding: '8px 0', textAlign: 'center' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginBottom: '4px' }}>
+                        Full Year {selectedYear}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)', marginBottom: '12px' }}>
+                        Aggregates all 12 months (Jan 1 – Dec 31)
+                      </div>
+                      <button
+                        onClick={() => setShowPeriodMenu(false)}
+                        className="btn-primary"
+                        style={{ width: '100%', padding: '8px', fontSize: '12px' }}
+                      >
+                        View Full Year {selectedYear}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Notification Bell */}
             <button 
@@ -426,288 +733,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           </div>
         </header>
 
-        {/* Main Body Content */}
-        <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
-          {activeTab === 'income' ? (
-            <IncomePage />
-          ) : activeTab === 'budgets' ? (
+        {/* Body Content */}
+        {activeTab === 'income' ? (
+          <IncomePage />
+        ) : activeTab === 'transactions' || activeTab === 'expenses' ? (
+          <ExpensePage />
+        ) : activeTab === 'budgets' ? (
+          <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
             <BudgetsView />
-          ) : (
-            <>
-              {/* Welcome Banner */}
-          <div style={{ marginBottom: '24px' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px' }}>
-              Good Morning, {userName.split(' ')[0]}! 👋
-            </h1>
-            <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)' }}>
-              Here's your financial overview for April 2026.
-            </p>
-          </div>
-
-          {/* 3 Metrics Cards + Financial Health Score Card */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '18px',
-            marginBottom: '24px'
-          }}>
-            {/* Total Income */}
-            <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--accent)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Total Income</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--light-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-                  <ArrowUpRight size={14} />
-                </span>
-              </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
-                ₹85,000
-              </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, marginTop: '4px' }}>
-                ↑ 12% vs. last month
-              </div>
-            </div>
-
-            {/* Total Expenses */}
-            <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--danger)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Total Expenses</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--light-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
-                  <ArrowDownRight size={14} />
-                </span>
-              </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
-                ₹42,000
-              </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--danger)', fontWeight: 600, marginTop: '4px' }}>
-                ↑ 5% vs. last month
-              </div>
-            </div>
-
-            {/* Net Savings */}
-            <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--info)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Savings</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--light-info)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--info)' }}>
-                  ★
-                </span>
-              </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
-                ₹43,000
-              </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, marginTop: '4px' }}>
-                ↑ 18% vs. last month
-              </div>
-            </div>
-
-            {/* Financial Health Score Widget */}
-            <div className="card-box" style={{ padding: '18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Financial Health</span>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--accent)' }}>Good</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', margin: '4px 0' }}>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)' }}>78</span>
-                <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>/ 100</span>
-              </div>
-              <div style={{ height: '7px', borderRadius: '4px', backgroundColor: 'var(--border)', overflow: 'hidden' }}>
-                <div style={{ width: '78%', height: '100%', backgroundColor: 'var(--accent)', borderRadius: '4px' }}></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Middle Row: Charts + Breakdown */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-            gap: '18px',
-            marginBottom: '24px'
-          }}>
-            {/* Income vs Expenses Bar Chart */}
-            <div className="card-box" style={{ padding: '22px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>Income vs Expenses</span>
-                <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>Last 6 Months ▾</span>
-              </div>
-
-              <svg viewBox="0 0 420 130" width="100%" height="130">
-                <line x1="0" y1="30" x2="420" y2="30" stroke="var(--border)" strokeDasharray="3,3" opacity="0.6" />
-                <line x1="0" y1="75" x2="420" y2="75" stroke="var(--border)" strokeDasharray="3,3" opacity="0.6" />
-                <line x1="0" y1="120" x2="420" y2="120" stroke="var(--border)" />
-                
-                {/* Jan */}
-                <rect x="25" y="50" width="14" height="70" rx="3" fill="#10B981" />
-                <rect x="42" y="70" width="14" height="50" rx="3" fill="#EF4444" />
-                {/* Feb */}
-                <rect x="95" y="42" width="14" height="78" rx="3" fill="#10B981" />
-                <rect x="112" y="65" width="14" height="55" rx="3" fill="#EF4444" />
-                {/* Mar */}
-                <rect x="165" y="36" width="14" height="84" rx="3" fill="#10B981" />
-                <rect x="182" y="60" width="14" height="60" rx="3" fill="#EF4444" />
-                {/* Apr */}
-                <rect x="235" y="26" width="14" height="94" rx="3" fill="#10B981" />
-                <rect x="252" y="58" width="14" height="62" rx="3" fill="#EF4444" />
-                {/* May */}
-                <rect x="305" y="20" width="14" height="100" rx="3" fill="#10B981" />
-                <rect x="322" y="52" width="14" height="68" rx="3" fill="#EF4444" />
-                {/* Jun */}
-                <rect x="375" y="15" width="14" height="105" rx="3" fill="#10B981" />
-                <rect x="392" y="48" width="14" height="72" rx="3" fill="#EF4444" />
-              </svg>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--secondary-text)', marginTop: '10px' }}>
-                <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
-              </div>
-              <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '12px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)' }}>
-                  <i style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px', display: 'inline-block' }}></i> Income
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)' }}>
-                  <i style={{ width: '8px', height: '8px', background: 'var(--danger)', borderRadius: '2px', display: 'inline-block' }}></i> Expenses
-                </span>
-              </div>
-            </div>
-
-            {/* Expense Breakdown Donut & Legend */}
-            <div className="card-box" style={{ padding: '22px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>Expense Breakdown</span>
-                <span style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 600 }}>₹42,000 total</span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                {/* Donut representation */}
-                <div style={{
-                  width: '110px',
-                  height: '110px',
-                  borderRadius: '50%',
-                  background: 'conic-gradient(#10B981 0 32%, #3B82F6 32% 60%, #F59E0B 60% 72%, #3B82F6 72% 82%, #64748B 82% 100%)',
-                  position: 'relative',
-                  flexShrink: 0
-                }}>
-                  <div style={{
-                    position: 'absolute',
-                    inset: '20px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--card)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: 'var(--primary)'
-                  }}>
-                    ₹42k
-                  </div>
-                </div>
-
-                {/* Legend list */}
-                <div style={{ flex: 1, fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--success)', borderRadius: '2px', marginRight: '6px' }}></i>Food & Dining (32%)</span>
-                    <b>₹13,440</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--info)', borderRadius: '2px', marginRight: '6px' }}></i>Rent (28%)</span>
-                    <b>₹11,760</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '2px', marginRight: '6px' }}></i>Transport (12%)</span>
-                    <b>₹5,040</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--info)', borderRadius: '2px', marginRight: '6px' }}></i>Shopping (10%)</span>
-                    <b>₹4,200</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: 'var(--secondary-text)', borderRadius: '2px', marginRight: '6px' }}></i>Others (18%)</span>
-                    <b>₹7,560</b>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Row: Recent Transactions Table */}
-          <div className="card-box" style={{ padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)' }}>Recent Transactions</span>
-              <span 
-                onClick={() => setActiveTab('income')}
-                style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}
-              >
-                View All &rarr;
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Row 1 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-                    <ArrowUpRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Salary</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 25, 2026 · Bank transfer</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent)' }}>
-                  +₹50,000
-                </div>
-              </div>
-
-              {/* Row 2 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
-                    <ArrowDownRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Groceries</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 24, 2026 · UPI</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--danger)' }}>
-                  -₹2,850
-                </div>
-              </div>
-
-              {/* Row 3 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
-                    <ArrowDownRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Electricity Bill</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 22, 2026 · UPI</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--danger)' }}>
-                  -₹1,200
-                </div>
-              </div>
-
-              {/* Row 4 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-                    <ArrowUpRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Freelance Work</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 20, 2026 · Card</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent)' }}>
-                  +₹8,000
-                </div>
-              </div>
-            </div>
-          </div>
-            </>
-          )}
-        </main>
+          </main>
+        ) : (
+          <DashboardView
+            periodType={periodType}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            selectedQuarter={selectedQuarter}
+            selectedHalf={selectedHalf}
+            userName={userName}
+            onNavigateTab={(tab) => setActiveTab(tab)}
+          />
+        )}
       </div>
 
       {/* Logout Confirmation Modal */}
