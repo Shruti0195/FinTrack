@@ -405,43 +405,7 @@ export const BudgetsView: React.FC = () => {
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           
-          {/* Period Selector Tabs: Monthly, Quarterly, Half-Yearly, Yearly */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-input)',
-            padding: '3px',
-            boxShadow: 'var(--shadow-sm)'
-          }}>
-            {[
-              { id: 'monthly', label: 'Monthly' },
-              { id: 'quarterly', label: 'Quarterly' },
-              { id: 'half_yearly', label: 'Half-Yearly' },
-              { id: 'yearly', label: 'Yearly' }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActivePeriod(tab.id as BudgetPeriodType)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  backgroundColor: activePeriod === tab.id ? 'var(--primary)' : 'transparent',
-                  color: activePeriod === tab.id ? 'var(--bg)' : 'var(--secondary-text)'
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Context-Sensitive Period Picker Dropdown (Matching Income Page Style) */}
+          {/* ── Unified Period Filter Dropdowns (Income-style) ── */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -449,12 +413,36 @@ export const BudgetsView: React.FC = () => {
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-input)',
             padding: '2px 8px',
-            gap: '6px',
+            gap: '0',
             boxShadow: 'var(--shadow-sm)'
           }}>
-            <Calendar size={16} color="var(--secondary-text)" />
-            
-            {/* 1. Monthly Selector */}
+            <Calendar size={16} color="var(--secondary-text)" style={{ flexShrink: 0 }} />
+
+            {/* Period Type Dropdown */}
+            <select
+              value={activePeriod}
+              onChange={(e) => setActivePeriod(e.target.value as BudgetPeriodType)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--main-text)',
+                fontSize: '13px',
+                fontWeight: 600,
+                outline: 'none',
+                padding: '8px 6px 8px 8px',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="monthly"  style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Monthly</option>
+              <option value="quarterly" style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Quarterly</option>
+              <option value="half_yearly" style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Half-Yearly</option>
+              <option value="yearly"   style={{ background: 'var(--card)', color: 'var(--main-text)' }}>Yearly</option>
+            </select>
+
+            {/* Divider */}
+            <span style={{ width: '1px', height: '18px', backgroundColor: 'var(--border)', flexShrink: 0 }} />
+
+            {/* Period Value Dropdown — Monthly */}
             {activePeriod === 'monthly' && (
               <select
                 value={selectedMonth}
@@ -466,8 +454,8 @@ export const BudgetsView: React.FC = () => {
                   fontSize: '13px',
                   fontWeight: 500,
                   outline: 'none',
-                  padding: '8px 4px',
-                  cursor: 'pointer'
+                  padding: '8px 6px',
+                  cursor: 'pointer',
                 }}
               >
                 {MONTH_OPTIONS.map((m) => (
@@ -478,7 +466,7 @@ export const BudgetsView: React.FC = () => {
               </select>
             )}
 
-            {/* 2. Quarterly Selector */}
+            {/* Period Value Dropdown — Quarterly */}
             {activePeriod === 'quarterly' && (
               <select
                 value={selectedQuarter}
@@ -490,8 +478,8 @@ export const BudgetsView: React.FC = () => {
                   fontSize: '13px',
                   fontWeight: 500,
                   outline: 'none',
-                  padding: '8px 4px',
-                  cursor: 'pointer'
+                  padding: '8px 6px',
+                  cursor: 'pointer',
                 }}
               >
                 {QUARTER_OPTIONS.map((q) => (
@@ -502,7 +490,7 @@ export const BudgetsView: React.FC = () => {
               </select>
             )}
 
-            {/* 3. Half-Yearly Selector */}
+            {/* Period Value Dropdown — Half-Yearly */}
             {activePeriod === 'half_yearly' && (
               <select
                 value={selectedHalf}
@@ -514,8 +502,8 @@ export const BudgetsView: React.FC = () => {
                   fontSize: '13px',
                   fontWeight: 500,
                   outline: 'none',
-                  padding: '8px 4px',
-                  cursor: 'pointer'
+                  padding: '8px 6px',
+                  cursor: 'pointer',
                 }}
               >
                 {HALF_YEAR_OPTIONS.map((h) => (
@@ -526,7 +514,12 @@ export const BudgetsView: React.FC = () => {
               </select>
             )}
 
-            {/* Year Selector (Always Visible) */}
+            {/* Divider before Year (not for yearly, which has no period value) */}
+            {activePeriod !== 'yearly' && (
+              <span style={{ width: '1px', height: '18px', backgroundColor: 'var(--border)', flexShrink: 0 }} />
+            )}
+
+            {/* Year Dropdown (Always Visible) */}
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(Number(e.target.value))}
@@ -537,9 +530,8 @@ export const BudgetsView: React.FC = () => {
                 fontSize: '13px',
                 fontWeight: 500,
                 outline: 'none',
-                padding: '8px 4px',
+                padding: '8px 6px 8px 6px',
                 cursor: 'pointer',
-                borderLeft: activePeriod !== 'yearly' ? '1px solid var(--border)' : 'none'
               }}
             >
               {[2024, 2025, 2026, 2027, 2028].map((y) => (
