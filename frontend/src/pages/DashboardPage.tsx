@@ -44,14 +44,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
     // Fetch logged in user details
     api.get('/auth/me')
       .then((res) => setUser(res.data))
-      .catch(() => {
-        // Fallback demo user if token is mock or offline
-        setUser({ name: 'Sweni Shah', email: 'sweni@fintrack.com', role: 'USER' });
+      .catch((err) => {
+        console.error('Failed to verify user session:', err);
+        onLogout();
       });
-  }, []);
+  }, [onLogout]);
 
-  const userName = user?.name || 'Sweni Shah';
-  const userInitials = userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'SS';
+  const userName = user?.name || 'User';
+  const userInitials = userName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg)' }}>
