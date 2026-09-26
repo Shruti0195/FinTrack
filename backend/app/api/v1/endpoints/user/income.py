@@ -486,6 +486,9 @@ def list_income(
     year: Optional[int] = Query(None),
     category_id: Optional[uuid.UUID] = None,
     search: Optional[str] = None,
+    min_amount: Optional[float] = Query(None, ge=0),
+    max_amount: Optional[float] = Query(None, ge=0),
+    date: Optional[str] = None,
     sort_by: Optional[str] = Query("date_desc"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
@@ -493,7 +496,7 @@ def list_income(
     current_user: User = Depends(get_current_user),
 ):
     """
-    List income transactions with filtering (month, year, category, search),
+    List income transactions with filtering (month, year, category, search, min/max amount, date),
     sorting (date, amount), and pagination.
     """
     query = (
@@ -519,6 +522,12 @@ def list_income(
         query = query.filter(
             func.lower(Transaction.description).like(s) | func.lower(Category.name).like(s)
         )
+    if min_amount is not None:
+        query = query.filter(Transaction.amount >= min_amount)
+    if max_amount is not None:
+        query = query.filter(Transaction.amount <= max_amount)
+    if date:
+        query = query.filter(cast(Transaction.transaction_date, String).like(f"{date}%"))
 
     # Calculate total matching count and sum
     total_count = query.count()
@@ -532,9 +541,17 @@ def list_income(
     if sort_by == "date_asc":
         query = query.order_by(asc(Transaction.transaction_date), asc(Transaction.created_at))
     elif sort_by == "amount_desc":
-        query = query.order_by(desc(Transaction.amount))
+        query = query.order_by(desc(Transaction.amount), desc(Transaction.transaction_date))
     elif sort_by == "amount_asc":
-        query = query.order_by(asc(Transaction.amount))
+        query = query.order_by(asc(Transaction.amount), desc(Transaction.transaction_date))
+    elif sort_by == "category_asc":
+        query = query.order_by(asc(Category.name), desc(Transaction.transaction_date))
+    elif sort_by == "category_desc":
+        query = query.order_by(desc(Category.name), desc(Transaction.transaction_date))
+    elif sort_by == "description_asc":
+        query = query.order_by(asc(Transaction.description), desc(Transaction.transaction_date))
+    elif sort_by == "description_desc":
+        query = query.order_by(desc(Transaction.description), desc(Transaction.transaction_date))
     else:  # default date_desc
         query = query.order_by(desc(Transaction.transaction_date), desc(Transaction.created_at))
 

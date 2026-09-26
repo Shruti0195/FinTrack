@@ -10,32 +10,37 @@ class BudgetBase(BaseModel):
     limit_amount: float = Field(..., gt=0, description="Monthly spending limit, must be greater than 0")
 
 class BudgetCreate(BudgetBase):
-    pass
+    apply_to_period: Optional[Literal["single_month", "quarter", "half_year", "year"]] = "single_month"
 
 class BudgetUpdate(BaseModel):
     limit_amount: float = Field(..., gt=0, description="Updated monthly spending limit")
 
 class BudgetResponse(BaseModel):
-    id: UUID
+    id: Optional[UUID] = None
     user_id: UUID
     category_id: UUID
     category_name: str
     type: str = "expense"
-    month: int
+    month: Optional[int] = None
     year: int
     limit_amount: float
     spent_amount: float = 0.0
     remaining_amount: float = 0.0
     percentage_used: float = 0.0
     status: Literal["safe", "warning", "exceeded"] = "safe"
-    created_at: datetime
-    updated_at: datetime
+    period_type: str = "monthly"
+    period_label: Optional[str] = None
+    months_budgeted: Optional[int] = 1
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 class BudgetSummaryResponse(BaseModel):
-    month: int
+    month: Optional[int] = None
     year: int
+    period_type: str = "monthly"
+    period_label: str = "September 2026"
     total_budget: float
     total_spent: float
     total_remaining: float
