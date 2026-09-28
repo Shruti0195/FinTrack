@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
-import { PeriodFilterDropdown, type PeriodType } from '../components/PeriodFilterDropdown';
+import type { PeriodType } from '../components/PeriodFilterDropdown';
 
 export interface IncomeCategory {
   id: string;
@@ -86,11 +86,6 @@ export interface IncomePageProps {
   selectedQuarter?: number;
   selectedHalf?: number;
   periodLabel?: string;
-  onPeriodTypeChange?: (type: PeriodType) => void;
-  onYearChange?: (year: number) => void;
-  onMonthChange?: (month: number) => void;
-  onQuarterChange?: (quarter: number) => void;
-  onHalfChange?: (half: number) => void;
 }
 
 export const IncomePage: React.FC<IncomePageProps> = ({
@@ -99,12 +94,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
   periodType = 'monthly',
   selectedQuarter = 2,
   selectedHalf = 1,
-  periodLabel: propPeriodLabel,
-  onPeriodTypeChange,
-  onYearChange,
-  onMonthChange,
-  onQuarterChange,
-  onHalfChange
+  periodLabel: propPeriodLabel
 }) => {
   // Compute start_date and end_date based on navbar period view
   let startDate: string | undefined;
@@ -784,22 +774,6 @@ export const IncomePage: React.FC<IncomePageProps> = ({
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Period Filter Dropdown (Navbar date filter applied in page) */}
-          <PeriodFilterDropdown
-            periodType={periodType}
-            selectedYear={selectedYear}
-            selectedMonth={selectedMonth}
-            selectedQuarter={selectedQuarter}
-            selectedHalf={selectedHalf}
-            onPeriodTypeChange={onPeriodTypeChange}
-            onYearChange={onYearChange}
-            onMonthChange={onMonthChange}
-            onQuarterChange={onQuarterChange}
-            onHalfChange={onHalfChange}
-            height="42px"
-            align="right"
-          />
-
           {/* Export Dropdown Menu (CSV or PDF) */}
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button

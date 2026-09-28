@@ -457,11 +457,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             selectedQuarter={selectedQuarter}
             selectedHalf={selectedHalf}
             periodLabel={periodLabel}
-            onPeriodTypeChange={(t) => setPeriodType(t)}
-            onYearChange={(y) => setSelectedYear(y)}
-            onMonthChange={(m) => setSelectedMonth(m)}
-            onQuarterChange={(q) => setSelectedQuarter(q)}
-            onHalfChange={(h) => setSelectedHalf(h)}
           />
         ) : activeTab === 'transactions' || activeTab === 'expenses' ? (
           <ExpensePage
@@ -471,11 +466,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             selectedQuarter={selectedQuarter}
             selectedHalf={selectedHalf}
             periodLabel={periodLabel}
-            onPeriodTypeChange={(t) => setPeriodType(t)}
-            onYearChange={(y) => setSelectedYear(y)}
-            onMonthChange={(m) => setSelectedMonth(m)}
-            onQuarterChange={(q) => setSelectedQuarter(q)}
-            onHalfChange={(h) => setSelectedHalf(h)}
           />
         ) : activeTab === 'budgets' ? (
           <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
@@ -485,11 +475,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               periodType={periodType}
               selectedQuarter={selectedQuarter}
               selectedHalf={selectedHalf}
-              onPeriodTypeChange={(t) => setPeriodType(t)}
-              onYearChange={(y) => setSelectedYear(y)}
-              onMonthChange={(m) => setSelectedMonth(m)}
-              onQuarterChange={(q) => setSelectedQuarter(q)}
-              onHalfChange={(h) => setSelectedHalf(h)}
             />
           </main>
         ) : (

@@ -28,7 +28,7 @@ import {
   deleteBudget 
 } from '../api/budgets';
 import { CustomSelect } from './CustomSelect';
-import { PeriodFilterDropdown, type PeriodType } from './PeriodFilterDropdown';
+import type { PeriodType } from './PeriodFilterDropdown';
 import type { 
   Budget, 
   BudgetSummary, 
@@ -160,11 +160,6 @@ export interface BudgetsViewProps {
   periodType?: PeriodType;
   selectedQuarter?: number;
   selectedHalf?: number;
-  onPeriodTypeChange?: (type: PeriodType) => void;
-  onYearChange?: (year: number) => void;
-  onMonthChange?: (month: number) => void;
-  onQuarterChange?: (quarter: number) => void;
-  onHalfChange?: (half: number) => void;
 }
 
 export const BudgetsView: React.FC<BudgetsViewProps> = ({
@@ -172,14 +167,8 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   selectedYear: propYear,
   periodType: propPeriodType,
   selectedQuarter: propQuarter,
-  selectedHalf: propHalf,
-  onPeriodTypeChange,
-  onYearChange,
-  onMonthChange,
-  onQuarterChange,
-  onHalfChange
+  selectedHalf: propHalf
 }) => {
-  const currentDate = new Date();
 
   // Period View state
   const [activePeriod, setActivePeriod] = useState<BudgetPeriodType>('monthly');
@@ -272,49 +261,6 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
       return () => clearTimeout(timer);
     }
   }, [successMsg]);
-
-  const handlePeriodTypeChange = (type: PeriodType) => {
-    const mapped: BudgetPeriodType = type === 'half_year' ? 'half_yearly' : type;
-    setActivePeriod(mapped);
-    if (onPeriodTypeChange) onPeriodTypeChange(type);
-  };
-
-  const handleYearChange = (year: number) => {
-    setSelectedYear(year);
-    if (onYearChange) onYearChange(year);
-  };
-
-  const handleMonthChange = (month: number) => {
-    setSelectedMonth(month);
-    if (onMonthChange) onMonthChange(month);
-  };
-
-  const handleQuarterChange = (quarter: number) => {
-    setSelectedQuarter(quarter);
-    if (onQuarterChange) onQuarterChange(quarter);
-  };
-
-  const handleHalfChange = (half: number) => {
-    setSelectedHalf(half);
-    if (onHalfChange) onHalfChange(half);
-  };
-
-  const handleResetToCurrent = () => {
-    const curMonth = currentDate.getMonth() + 1;
-    const curYear = currentDate.getFullYear();
-    const curQuarter = Math.floor((curMonth - 1) / 3) + 1;
-    const curHalf = curMonth <= 6 ? 1 : 2;
-    setSelectedMonth(curMonth);
-    setSelectedQuarter(curQuarter);
-    setSelectedHalf(curHalf);
-    setSelectedYear(curYear);
-    setActivePeriod('monthly');
-    if (onMonthChange) onMonthChange(curMonth);
-    if (onQuarterChange) onQuarterChange(curQuarter);
-    if (onHalfChange) onHalfChange(curHalf);
-    if (onYearChange) onYearChange(curYear);
-    if (onPeriodTypeChange) onPeriodTypeChange('monthly');
-  };
 
   // Open create modal
   const handleOpenCreateModal = () => {
@@ -450,40 +396,6 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          
-          {/* Period Filter Dropdown (Navbar date filter applied in page) */}
-          <PeriodFilterDropdown
-            periodType={activePeriod === 'half_yearly' ? 'half_year' : activePeriod}
-            selectedYear={selectedYear}
-            selectedMonth={selectedMonth}
-            selectedQuarter={selectedQuarter}
-            selectedHalf={selectedHalf}
-            onPeriodTypeChange={handlePeriodTypeChange}
-            onYearChange={handleYearChange}
-            onMonthChange={handleMonthChange}
-            onQuarterChange={handleQuarterChange}
-            onHalfChange={handleHalfChange}
-            height="38px"
-            align="right"
-          />
-
-          {/* Quick jump to Today */}
-          <button
-            onClick={handleResetToCurrent}
-            style={{
-              backgroundColor: 'transparent',
-              border: '1px solid var(--border)',
-              color: 'var(--secondary-text)',
-              fontSize: '12px',
-              fontWeight: 600,
-              padding: '7px 12px',
-              borderRadius: 'var(--radius-btn)',
-              cursor: 'pointer'
-            }}
-          >
-            Today
-          </button>
-
           {/* Set New Budget Button */}
           <button
             onClick={handleOpenCreateModal}
