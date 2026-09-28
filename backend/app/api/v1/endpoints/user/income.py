@@ -2,7 +2,7 @@ import csv
 import io
 import math
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse, Response
@@ -102,13 +102,15 @@ def create_custom_income_category(
 def get_income_stats(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Calculates summary KPIs and breakdown for income:
-    - Total income for selected month (defaults to current month)
-    - Total income for previous month
+    - Total income for selected month/range
+    - Total income for previous month/range
     - Month-over-month growth percentage
     - Number of entries and average amount per entry
     - Top earning category/source
@@ -118,75 +120,140 @@ def get_income_stats(
     target_month = month if month is not None else today.month
     target_year = year if year is not None else today.year
 
-    if target_month == 1:
-        prev_month = 12
-        prev_year = target_year - 1
+    if start_date is not None and end_date is not None:
+        curr_query = (
+            db.query(
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+                func.count(Transaction.id).label("count"),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "income",
+                Transaction.transaction_date >= start_date,
+                Transaction.transaction_date <= end_date,
+            )
+            .first()
+        )
+        total_this_month = float(curr_query.total) if curr_query else 0.0
+        count_this_month = int(curr_query.count) if curr_query else 0
+
+        # Prior equivalent period
+        period_days = (end_date - start_date).days + 1
+        prev_end = start_date - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_days - 1)
+
+        prev_query = (
+            db.query(func.coalesce(func.sum(Transaction.amount), 0.0).label("total"))
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "income",
+                Transaction.transaction_date >= prev_start,
+                Transaction.transaction_date <= prev_end,
+            )
+            .first()
+        )
+        total_last_month = float(prev_query.total) if prev_query else 0.0
+
+        if total_last_month > 0:
+            mom_change = round(((total_this_month - total_last_month) / total_last_month) * 100, 1)
+        elif total_this_month > 0:
+            mom_change = 100.0
+        else:
+            mom_change = 0.0
+
+        avg_income = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
+
+        cat_breakdown_raw = (
+            db.query(
+                Category.id.label("cat_id"),
+                Category.name.label("cat_name"),
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("cat_total"),
+                func.count(Transaction.id).label("cat_count"),
+            )
+            .join(
+                Transaction,
+                (Transaction.category_id == Category.id) & (Transaction.type == Category.type),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "income",
+                Transaction.transaction_date >= start_date,
+                Transaction.transaction_date <= end_date,
+            )
+            .group_by(Category.id, Category.name)
+            .order_by(desc("cat_total"))
+            .all()
+        )
     else:
-        prev_month = target_month - 1
-        prev_year = target_year
+        if target_month == 1:
+            prev_month = 12
+            prev_year = target_year - 1
+        else:
+            prev_month = target_month - 1
+            prev_year = target_year
 
-    # Current month total and count
-    curr_query = (
-        db.query(
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
-            func.count(Transaction.id).label("count"),
+        # Current month total and count
+        curr_query = (
+            db.query(
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+                func.count(Transaction.id).label("count"),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "income",
+                extract("month", Transaction.transaction_date) == target_month,
+                extract("year", Transaction.transaction_date) == target_year,
+            )
+            .first()
         )
-        .filter(
-            Transaction.user_id == current_user.id,
-            Transaction.type == "income",
-            extract("month", Transaction.transaction_date) == target_month,
-            extract("year", Transaction.transaction_date) == target_year,
-        )
-        .first()
-    )
-    total_this_month = float(curr_query.total) if curr_query else 0.0
-    count_this_month = int(curr_query.count) if curr_query else 0
+        total_this_month = float(curr_query.total) if curr_query else 0.0
+        count_this_month = int(curr_query.count) if curr_query else 0
 
-    # Previous month total
-    prev_query = (
-        db.query(func.coalesce(func.sum(Transaction.amount), 0.0).label("total"))
-        .filter(
-            Transaction.user_id == current_user.id,
-            Transaction.type == "income",
-            extract("month", Transaction.transaction_date) == prev_month,
-            extract("year", Transaction.transaction_date) == prev_year,
+        # Previous month total
+        prev_query = (
+            db.query(func.coalesce(func.sum(Transaction.amount), 0.0).label("total"))
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "income",
+                extract("month", Transaction.transaction_date) == prev_month,
+                extract("year", Transaction.transaction_date) == prev_year,
+            )
+            .first()
         )
-        .first()
-    )
-    total_last_month = float(prev_query.total) if prev_query else 0.0
+        total_last_month = float(prev_query.total) if prev_query else 0.0
 
-    # Month over month %
-    if total_last_month > 0:
-        mom_change = round(((total_this_month - total_last_month) / total_last_month) * 100, 1)
-    elif total_this_month > 0:
-        mom_change = 100.0
-    else:
-        mom_change = 0.0
+        # Month over month %
+        if total_last_month > 0:
+            mom_change = round(((total_this_month - total_last_month) / total_last_month) * 100, 1)
+        elif total_this_month > 0:
+            mom_change = 100.0
+        else:
+            mom_change = 0.0
 
-    avg_income = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
+        avg_income = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
 
-    # Breakdown by category for current month
-    cat_breakdown_raw = (
-        db.query(
-            Category.id.label("cat_id"),
-            Category.name.label("cat_name"),
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("cat_total"),
-            func.count(Transaction.id).label("cat_count"),
+        # Breakdown by category for current month
+        cat_breakdown_raw = (
+            db.query(
+                Category.id.label("cat_id"),
+                Category.name.label("cat_name"),
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("cat_total"),
+                func.count(Transaction.id).label("cat_count"),
+            )
+            .join(
+                Transaction,
+                (Transaction.category_id == Category.id) & (Transaction.type == Category.type),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "income",
+                extract("month", Transaction.transaction_date) == target_month,
+                extract("year", Transaction.transaction_date) == target_year,
+            )
+            .group_by(Category.id, Category.name)
+            .order_by(desc("cat_total"))
+            .all()
         )
-        .join(
-            Transaction,
-            (Transaction.category_id == Category.id) & (Transaction.type == Category.type),
-        )
-        .filter(
-            Transaction.user_id == current_user.id,
-            Transaction.type == "income",
-            extract("month", Transaction.transaction_date) == target_month,
-            extract("year", Transaction.transaction_date) == target_year,
-        )
-        .group_by(Category.id, Category.name)
-        .order_by(desc("cat_total"))
-        .all()
-    )
 
     category_breakdown: list[IncomeCategoryShare] = []
     top_source_name = None
@@ -422,6 +489,8 @@ def export_income(
     format: str = Query("csv", regex="^(csv|pdf)$"),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     category_id: Optional[uuid.UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -441,9 +510,13 @@ def export_income(
         )
     )
 
-    if month is not None:
+    if start_date is not None:
+        query = query.filter(Transaction.transaction_date >= start_date)
+    if end_date is not None:
+        query = query.filter(Transaction.transaction_date <= end_date)
+    if start_date is None and month is not None:
         query = query.filter(extract("month", Transaction.transaction_date) == month)
-    if year is not None:
+    if start_date is None and year is not None:
         query = query.filter(extract("year", Transaction.transaction_date) == year)
     if category_id:
         query = query.filter(Transaction.category_id == category_id)
@@ -534,6 +607,8 @@ def export_income_csv_direct(
 def list_income(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     category_id: Optional[uuid.UUID] = None,
     search: Optional[str] = None,
     min_amount: Optional[float] = Query(None, ge=0),
@@ -546,7 +621,7 @@ def list_income(
     current_user: User = Depends(get_current_user),
 ):
     """
-    List income transactions with filtering (month, year, category, search, min/max amount, date),
+    List income transactions with filtering (month, year, start/end date, category, search, min/max amount, date),
     sorting (date, amount), and pagination.
     """
     query = (
@@ -561,9 +636,13 @@ def list_income(
         )
     )
 
-    if month is not None:
+    if start_date is not None:
+        query = query.filter(Transaction.transaction_date >= start_date)
+    if end_date is not None:
+        query = query.filter(Transaction.transaction_date <= end_date)
+    if start_date is None and month is not None:
         query = query.filter(extract("month", Transaction.transaction_date) == month)
-    if year is not None:
+    if start_date is None and year is not None:
         query = query.filter(extract("year", Transaction.transaction_date) == year)
     if category_id:
         query = query.filter(Transaction.category_id == category_id)

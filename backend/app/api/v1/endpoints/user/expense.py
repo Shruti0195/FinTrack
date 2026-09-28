@@ -2,7 +2,7 @@ import csv
 import io
 import math
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
@@ -52,13 +52,15 @@ def get_expense_categories(
 def get_expense_stats(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Calculates summary KPIs and breakdown for expenses:
-    - Total expenses for selected month (defaults to current month)
-    - Total expenses for previous month
+    - Total expenses for selected month/range
+    - Total expenses for previous month/range
     - Month-over-month change percentage
     - Number of entries and average expense per entry
     - Top spending category
@@ -68,75 +70,140 @@ def get_expense_stats(
     target_month = month if month is not None else today.month
     target_year = year if year is not None else today.year
 
-    if target_month == 1:
-        prev_month = 12
-        prev_year = target_year - 1
+    if start_date is not None and end_date is not None:
+        curr_query = (
+            db.query(
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+                func.count(Transaction.id).label("count"),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "expense",
+                Transaction.transaction_date >= start_date,
+                Transaction.transaction_date <= end_date,
+            )
+            .first()
+        )
+        total_this_month = float(curr_query.total) if curr_query else 0.0
+        count_this_month = int(curr_query.count) if curr_query else 0
+
+        # Prior equivalent period
+        period_days = (end_date - start_date).days + 1
+        prev_end = start_date - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_days - 1)
+
+        prev_query = (
+            db.query(func.coalesce(func.sum(Transaction.amount), 0.0).label("total"))
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "expense",
+                Transaction.transaction_date >= prev_start,
+                Transaction.transaction_date <= prev_end,
+            )
+            .first()
+        )
+        total_last_month = float(prev_query.total) if prev_query else 0.0
+
+        if total_last_month > 0:
+            mom_change = round(((total_this_month - total_last_month) / total_last_month) * 100, 1)
+        elif total_this_month > 0:
+            mom_change = 100.0
+        else:
+            mom_change = 0.0
+
+        avg_expense = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
+
+        cat_breakdown_raw = (
+            db.query(
+                Category.id.label("cat_id"),
+                Category.name.label("cat_name"),
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("cat_total"),
+                func.count(Transaction.id).label("cat_count"),
+            )
+            .join(
+                Transaction,
+                (Transaction.category_id == Category.id) & (Transaction.type == Category.type),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "expense",
+                Transaction.transaction_date >= start_date,
+                Transaction.transaction_date <= end_date,
+            )
+            .group_by(Category.id, Category.name)
+            .order_by(desc("cat_total"))
+            .all()
+        )
     else:
-        prev_month = target_month - 1
-        prev_year = target_year
+        if target_month == 1:
+            prev_month = 12
+            prev_year = target_year - 1
+        else:
+            prev_month = target_month - 1
+            prev_year = target_year
 
-    # Current month total and count
-    curr_query = (
-        db.query(
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
-            func.count(Transaction.id).label("count"),
+        # Current month total and count
+        curr_query = (
+            db.query(
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+                func.count(Transaction.id).label("count"),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "expense",
+                extract("month", Transaction.transaction_date) == target_month,
+                extract("year", Transaction.transaction_date) == target_year,
+            )
+            .first()
         )
-        .filter(
-            Transaction.user_id == current_user.id,
-            Transaction.type == "expense",
-            extract("month", Transaction.transaction_date) == target_month,
-            extract("year", Transaction.transaction_date) == target_year,
-        )
-        .first()
-    )
-    total_this_month = float(curr_query.total) if curr_query else 0.0
-    count_this_month = int(curr_query.count) if curr_query else 0
+        total_this_month = float(curr_query.total) if curr_query else 0.0
+        count_this_month = int(curr_query.count) if curr_query else 0
 
-    # Previous month total
-    prev_query = (
-        db.query(func.coalesce(func.sum(Transaction.amount), 0.0).label("total"))
-        .filter(
-            Transaction.user_id == current_user.id,
-            Transaction.type == "expense",
-            extract("month", Transaction.transaction_date) == prev_month,
-            extract("year", Transaction.transaction_date) == prev_year,
+        # Previous month total
+        prev_query = (
+            db.query(func.coalesce(func.sum(Transaction.amount), 0.0).label("total"))
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "expense",
+                extract("month", Transaction.transaction_date) == prev_month,
+                extract("year", Transaction.transaction_date) == prev_year,
+            )
+            .first()
         )
-        .first()
-    )
-    total_last_month = float(prev_query.total) if prev_query else 0.0
+        total_last_month = float(prev_query.total) if prev_query else 0.0
 
-    # Month over month %
-    if total_last_month > 0:
-        mom_change = round(((total_this_month - total_last_month) / total_last_month) * 100, 1)
-    elif total_this_month > 0:
-        mom_change = 100.0
-    else:
-        mom_change = 0.0
+        # Month over month %
+        if total_last_month > 0:
+            mom_change = round(((total_this_month - total_last_month) / total_last_month) * 100, 1)
+        elif total_this_month > 0:
+            mom_change = 100.0
+        else:
+            mom_change = 0.0
 
-    avg_expense = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
+        avg_expense = round(total_this_month / count_this_month, 2) if count_this_month > 0 else 0.0
 
-    # Breakdown by category for current month
-    cat_breakdown_raw = (
-        db.query(
-            Category.id.label("cat_id"),
-            Category.name.label("cat_name"),
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("cat_total"),
-            func.count(Transaction.id).label("cat_count"),
+        # Breakdown by category for current month
+        cat_breakdown_raw = (
+            db.query(
+                Category.id.label("cat_id"),
+                Category.name.label("cat_name"),
+                func.coalesce(func.sum(Transaction.amount), 0.0).label("cat_total"),
+                func.count(Transaction.id).label("cat_count"),
+            )
+            .join(
+                Transaction,
+                (Transaction.category_id == Category.id) & (Transaction.type == Category.type),
+            )
+            .filter(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "expense",
+                extract("month", Transaction.transaction_date) == target_month,
+                extract("year", Transaction.transaction_date) == target_year,
+            )
+            .group_by(Category.id, Category.name)
+            .order_by(desc("cat_total"))
+            .all()
         )
-        .join(
-            Transaction,
-            (Transaction.category_id == Category.id) & (Transaction.type == Category.type),
-        )
-        .filter(
-            Transaction.user_id == current_user.id,
-            Transaction.type == "expense",
-            extract("month", Transaction.transaction_date) == target_month,
-            extract("year", Transaction.transaction_date) == target_year,
-        )
-        .group_by(Category.id, Category.name)
-        .order_by(desc("cat_total"))
-        .all()
-    )
 
     category_breakdown: list[ExpenseCategoryShare] = []
     top_cat_name = None
@@ -376,6 +443,8 @@ def export_expense(
     format: str = Query("csv", regex="^(csv|pdf)$"),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     category_id: Optional[uuid.UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -395,9 +464,13 @@ def export_expense(
         )
     )
 
-    if month is not None:
+    if start_date is not None:
+        query = query.filter(Transaction.transaction_date >= start_date)
+    if end_date is not None:
+        query = query.filter(Transaction.transaction_date <= end_date)
+    if start_date is None and month is not None:
         query = query.filter(extract("month", Transaction.transaction_date) == month)
-    if year is not None:
+    if start_date is None and year is not None:
         query = query.filter(extract("year", Transaction.transaction_date) == year)
     if category_id:
         query = query.filter(Transaction.category_id == category_id)
@@ -405,7 +478,9 @@ def export_expense(
     results = query.order_by(desc(Transaction.transaction_date)).all()
 
     month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-    if month and year:
+    if start_date and end_date:
+        period_label = f"{start_date.strftime('%d %b %Y')} - {end_date.strftime('%d %b %Y')}"
+    elif month and year:
         period_label = f"{month_names[month]} {year}"
     elif year:
         period_label = f"Full Year {year}"
@@ -463,30 +538,36 @@ def export_expense(
 def export_expense_pdf_direct(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     category_id: Optional[uuid.UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Direct alias for PDF export."""
-    return export_expense(format="pdf", month=month, year=year, category_id=category_id, db=db, current_user=current_user)
+    return export_expense(format="pdf", month=month, year=year, start_date=start_date, end_date=end_date, category_id=category_id, db=db, current_user=current_user)
 
 
 @router.get("/export/csv")
 def export_expense_csv_direct(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     category_id: Optional[uuid.UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Direct alias for CSV export."""
-    return export_expense(format="csv", month=month, year=year, category_id=category_id, db=db, current_user=current_user)
+    return export_expense(format="csv", month=month, year=year, start_date=start_date, end_date=end_date, category_id=category_id, db=db, current_user=current_user)
 
 
 @router.get("", response_model=ExpenseListResponse)
 def list_expenses(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     category_id: Optional[uuid.UUID] = None,
     min_amount: Optional[float] = Query(None, ge=0),
     max_amount: Optional[float] = Query(None, ge=0),
@@ -499,7 +580,7 @@ def list_expenses(
     current_user: User = Depends(get_current_user),
 ):
     """
-    List expense transactions with filtering (month, year, category, search, min/max amount, date),
+    List expense transactions with filtering (month, year, start/end date, category, search, min/max amount, date),
     sorting (date, amount, category, description), and pagination (defaults to 6 items/page).
     """
     query = (
@@ -514,9 +595,13 @@ def list_expenses(
         )
     )
 
-    if month is not None:
+    if start_date is not None:
+        query = query.filter(Transaction.transaction_date >= start_date)
+    if end_date is not None:
+        query = query.filter(Transaction.transaction_date <= end_date)
+    if start_date is None and month is not None:
         query = query.filter(extract("month", Transaction.transaction_date) == month)
-    if year is not None:
+    if start_date is None and year is not None:
         query = query.filter(extract("year", Transaction.transaction_date) == year)
     if category_id:
         query = query.filter(Transaction.category_id == category_id)

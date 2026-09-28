@@ -3,7 +3,6 @@ import {
   Plus,
   Search,
   Download,
-  Calendar,
   ArrowUpDown,
   Edit2,
   Trash2,
@@ -27,6 +26,7 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
+import type { PeriodType } from '../components/PeriodFilterDropdown';
 
 export interface ExpenseCategory {
   id: string;
@@ -76,7 +76,66 @@ const DEFAULT_CATEGORIES: ExpenseCategory[] = [
 
 const PAYMENT_METHODS = ['UPI', 'Card', 'Cash', 'Bank transfer', 'Net Banking'];
 
-export const ExpensePage: React.FC = () => {
+const MONTHS_LIST = [
+  { value: 0, label: 'All Months' },
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' }
+];
+
+export interface ExpensePageProps {
+  selectedMonth?: number;
+  selectedYear?: number;
+  periodType?: PeriodType;
+  selectedQuarter?: number;
+  selectedHalf?: number;
+  periodLabel?: string;
+}
+
+export const ExpensePage: React.FC<ExpensePageProps> = ({
+  selectedMonth = 4,
+  selectedYear = 2026,
+  periodType = 'monthly',
+  selectedQuarter = 2,
+  selectedHalf = 1,
+  periodLabel: propPeriodLabel
+}) => {
+  // Compute start_date and end_date based on navbar period view
+  let startDate: string | undefined;
+  let endDate: string | undefined;
+  if (periodType === 'monthly') {
+    const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+    startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+    endDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else if (periodType === 'quarterly') {
+    const startM = (selectedQuarter - 1) * 3 + 1;
+    const endM = startM + 2;
+    const lastDay = new Date(selectedYear, endM, 0).getDate();
+    startDate = `${selectedYear}-${String(startM).padStart(2, '0')}-01`;
+    endDate = `${selectedYear}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else if (periodType === 'half_year') {
+    const startM = selectedHalf === 1 ? 1 : 7;
+    const endM = selectedHalf === 1 ? 6 : 12;
+    const lastDay = new Date(selectedYear, endM, 0).getDate();
+    startDate = `${selectedYear}-${String(startM).padStart(2, '0')}-01`;
+    endDate = `${selectedYear}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else if (periodType === 'yearly') {
+    startDate = `${selectedYear}-01-01`;
+    endDate = `${selectedYear}-12-31`;
+  }
+
+  const months = MONTHS_LIST;
+  const activePeriodLabel = propPeriodLabel || (periodType === 'monthly' ? `${months[selectedMonth]?.label || ''} ${selectedYear}` : `Year ${selectedYear}`);
+
   // Data state
   const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>(DEFAULT_CATEGORIES);
@@ -103,20 +162,16 @@ export const ExpensePage: React.FC = () => {
   // Filter & Search state
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
-  // Column-wise filter states (Date & Amount; Description is excluded per requirements)
-  const [colDateFilter, setColDateFilter] = useState<string>('');
+  // Column-wise filter states (Amount only; Date filter removed per user specification)
   const [colMinAmount, setColMinAmount] = useState<string>('');
   const [colMaxAmount, setColMaxAmount] = useState<string>('');
 
   const hasActiveColumnFilters = Boolean(
-    colDateFilter || colMinAmount || colMaxAmount || (selectedCategory !== 'all')
+    colMinAmount || colMaxAmount || (selectedCategory !== 'all')
   );
 
   const resetColumnFilters = () => {
-    setColDateFilter('');
     setColMinAmount('');
     setColMaxAmount('');
     setSelectedCategory('all');
@@ -231,18 +286,23 @@ export const ExpensePage: React.FC = () => {
       });
   }, []);
 
-  // Fetch stats for the selected month/year
+  // Fetch stats for the selected period
   const fetchStats = useCallback(() => {
-    const params: Record<string, number> = {};
-    if (selectedMonth > 0) params.month = selectedMonth;
-    if (selectedYear > 0) params.year = selectedYear;
+    const params: Record<string, string | number> = {};
+    if (startDate && endDate) {
+      params.start_date = startDate;
+      params.end_date = endDate;
+    } else {
+      if (selectedMonth > 0) params.month = selectedMonth;
+      if (selectedYear > 0) params.year = selectedYear;
+    }
 
     api.get('/user/expenses/stats', { params })
       .then((res) => setStats(res.data))
       .catch(() => {
         // Fallback calculation
       });
-  }, [selectedMonth, selectedYear]);
+  }, [startDate, endDate, selectedMonth, selectedYear]);
 
   // Fetch expense entries with current filters & sorting
   const fetchExpenses = useCallback(() => {
@@ -253,11 +313,15 @@ export const ExpensePage: React.FC = () => {
       sort_by: sortBy
     };
 
-    if (selectedMonth > 0) params.month = selectedMonth;
-    if (selectedYear > 0) params.year = selectedYear;
+    if (startDate && endDate) {
+      params.start_date = startDate;
+      params.end_date = endDate;
+    } else {
+      if (selectedMonth > 0) params.month = selectedMonth;
+      if (selectedYear > 0) params.year = selectedYear;
+    }
     if (selectedCategory !== 'all') params.category_id = selectedCategory;
     if (search.trim()) params.search = search.trim();
-    if (colDateFilter) params.date = colDateFilter;
     if (colMinAmount) params.min_amount = parseFloat(colMinAmount);
     if (colMaxAmount) params.max_amount = parseFloat(colMaxAmount);
 
@@ -274,7 +338,11 @@ export const ExpensePage: React.FC = () => {
         setLoading(false);
         setIsFetching(false);
       });
-  }, [page, sortBy, selectedMonth, selectedYear, selectedCategory, search, colDateFilter, colMinAmount, colMaxAmount]);
+  }, [page, sortBy, startDate, endDate, selectedMonth, selectedYear, selectedCategory, search, colMinAmount, colMaxAmount]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [startDate, endDate, selectedMonth, selectedYear, periodType, selectedQuarter, selectedHalf]);
 
   useEffect(() => {
     fetchStats();
@@ -397,8 +465,13 @@ export const ExpensePage: React.FC = () => {
     setShowExportMenu(false);
     try {
       const params: Record<string, string | number> = { format: 'csv' };
-      if (selectedMonth > 0) params.month = selectedMonth;
-      if (selectedYear > 0) params.year = selectedYear;
+      if (startDate && endDate) {
+        params.start_date = startDate;
+        params.end_date = endDate;
+      } else {
+        if (selectedMonth > 0) params.month = selectedMonth;
+        if (selectedYear > 0) params.year = selectedYear;
+      }
       if (selectedCategory !== 'all') params.category_id = selectedCategory;
 
       const res = await api.get('/user/expenses/export', {
@@ -410,8 +483,8 @@ export const ExpensePage: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      const monthLabel = selectedMonth > 0 ? months.find(m => m.value === selectedMonth)?.label.toLowerCase() : 'all';
-      link.setAttribute('download', `fintrack_expenses_${selectedYear}_${monthLabel}.csv`);
+      const fileLabel = activePeriodLabel ? activePeriodLabel.replace(/\s+/g, '_').toLowerCase() : (selectedMonth > 0 ? months.find(m => m.value === selectedMonth)?.label.toLowerCase() : 'all');
+      link.setAttribute('download', `fintrack_expenses_${fileLabel}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -442,7 +515,8 @@ export const ExpensePage: React.FC = () => {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `fintrack_expenses_export.csv`);
+    const fileLabel = activePeriodLabel ? activePeriodLabel.replace(/\s+/g, '_').toLowerCase() : 'all';
+    link.setAttribute('download', `fintrack_expenses_${fileLabel}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -455,8 +529,13 @@ export const ExpensePage: React.FC = () => {
     setShowExportMenu(false);
     try {
       const params: Record<string, string | number> = { format: 'pdf' };
-      if (selectedMonth > 0) params.month = selectedMonth;
-      if (selectedYear > 0) params.year = selectedYear;
+      if (startDate && endDate) {
+        params.start_date = startDate;
+        params.end_date = endDate;
+      } else {
+        if (selectedMonth > 0) params.month = selectedMonth;
+        if (selectedYear > 0) params.year = selectedYear;
+      }
       if (selectedCategory !== 'all') params.category_id = selectedCategory;
 
       const res = await api.get('/user/expenses/export', {
@@ -468,8 +547,8 @@ export const ExpensePage: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      const monthLabel = selectedMonth > 0 ? months.find(m => m.value === selectedMonth)?.label.toLowerCase() : 'all';
-      link.setAttribute('download', `fintrack_expenses_${selectedYear}_${monthLabel}.pdf`);
+      const fileLabel = activePeriodLabel ? activePeriodLabel.replace(/\s+/g, '_').toLowerCase() : (selectedMonth > 0 ? months.find(m => m.value === selectedMonth)?.label.toLowerCase() : 'all');
+      link.setAttribute('download', `fintrack_expenses_${fileLabel}.pdf`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -501,22 +580,6 @@ export const ExpensePage: React.FC = () => {
       return dateStr;
     }
   };
-
-  const months = [
-    { value: 0, label: 'All Months' },
-    { value: 1, label: 'January' },
-    { value: 2, label: 'February' },
-    { value: 3, label: 'March' },
-    { value: 4, label: 'April' },
-    { value: 5, label: 'May' },
-    { value: 6, label: 'June' },
-    { value: 7, label: 'July' },
-    { value: 8, label: 'August' },
-    { value: 9, label: 'September' },
-    { value: 10, label: 'October' },
-    { value: 11, label: 'November' },
-    { value: 12, label: 'December' }
-  ];
 
   return (
     <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
@@ -563,62 +626,31 @@ export const ExpensePage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Month & Year Picker */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-input)',
-            padding: '2px 8px',
-            gap: '6px'
-          }}>
-            <Calendar size={16} color="var(--secondary-text)" style={{ marginLeft: '4px' }} />
-            
-            <CustomSelect
-              value={selectedMonth}
-              onChange={(val) => {
-                setSelectedMonth(Number(val));
-                setPage(1);
-              }}
-              options={months.map(m => ({ value: m.value, label: m.label }))}
-              size="sm"
-              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
-            />
-
-            <span style={{ color: 'var(--border)', height: '16px', width: '1px', backgroundColor: 'var(--border)' }} />
-
-            <CustomSelect
-              value={selectedYear}
-              onChange={(val) => {
-                setSelectedYear(Number(val));
-                setPage(1);
-              }}
-              options={[2024, 2025, 2026, 2027].map(y => ({ value: y, label: String(y) }))}
-              size="sm"
-              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
-            />
-          </div>
-
           {/* Export Menu Dropdown (CSV / PDF) */}
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="btn-secondary"
               style={{
+                backgroundColor: '#000000',
+                color: '#FFFFFF',
+                border: '1px solid #000000',
+                borderRadius: 'var(--radius-btn)',
+                padding: '9px 16px',
+                fontSize: '13.5px',
+                fontWeight: 600,
+                height: '42px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '9px 15px',
-                fontSize: '13px',
-                fontWeight: 600,
-                borderRadius: 'var(--radius-btn)',
-                cursor: 'pointer'
+                gap: '7px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                transition: 'all 0.15s ease'
               }}
+              title="Export expenses as CSV or PDF"
             >
-              <Download size={15} />
-              <span>Export</span>
-              <ChevronDown size={14} style={{ transform: showExportMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+              <Download size={16} color="#FFFFFF" />
+              <span style={{ color: '#FFFFFF' }}>Export</span>
+              <ChevronDown size={14} color="#FFFFFF" style={{ transform: showExportMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
             </button>
 
             {showExportMenu && (
@@ -726,7 +758,7 @@ export const ExpensePage: React.FC = () => {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>
-              Total Expenses (This Month)
+              Total Expenses ({activePeriodLabel})
             </span>
             <span style={{
               width: '28px',
@@ -789,7 +821,7 @@ export const ExpensePage: React.FC = () => {
             {formatCurrency(stats.avg_expense_per_entry)}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>
-            Across <b>{stats.entries_count_this_month}</b> recorded transactions
+            Across <b>{stats.entries_count_this_month}</b> recorded transactions in {activePeriodLabel}
           </div>
         </div>
 
@@ -914,45 +946,8 @@ export const ExpensePage: React.FC = () => {
                 backgroundColor: 'var(--card-subtle)',
                 borderBottom: '2px solid var(--border)'
               }}>
-                {/* 1. Date Column Filter */}
-                <th style={{ padding: '6px 12px 10px 20px' }}>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type="date"
-                      value={colDateFilter}
-                      onChange={(e) => {
-                        setColDateFilter(e.target.value);
-                        setPage(1);
-                      }}
-                      className="input-field"
-                      style={{
-                        height: '32px',
-                        fontSize: '12px',
-                        padding: '4px 8px',
-                        backgroundColor: 'var(--card)',
-                        width: '100%',
-                        borderRadius: '6px'
-                      }}
-                      title="Filter by specific date"
-                    />
-                    {colDateFilter && (
-                      <button
-                        onClick={() => { setColDateFilter(''); setPage(1); }}
-                        style={{
-                          position: 'absolute',
-                          right: '24px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--secondary-text)',
-                          cursor: 'pointer'
-                        }}
-                        title="Clear date filter"
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-                </th>
+                {/* 1. Date Column Filter - Removed per user request */}
+                <th style={{ padding: '6px 12px 10px 20px' }}></th>
 
                 {/* 2. Category Column Filter */}
                 <th style={{ padding: '6px 12px 10px 12px' }}>

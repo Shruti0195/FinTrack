@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, 
-  Calendar,
   AlertTriangle, 
   CheckCircle, 
   AlertCircle, 
@@ -29,6 +28,7 @@ import {
   deleteBudget 
 } from '../api/budgets';
 import { CustomSelect } from './CustomSelect';
+import type { PeriodType } from './PeriodFilterDropdown';
 import type { 
   Budget, 
   BudgetSummary, 
@@ -49,18 +49,6 @@ const MONTH_OPTIONS = [
   { value: 10, label: 'October' },
   { value: 11, label: 'November' },
   { value: 12, label: 'December' },
-];
-
-const QUARTER_OPTIONS = [
-  { value: 1, label: 'Q1 (Jan – Mar)' },
-  { value: 2, label: 'Q2 (Apr – Jun)' },
-  { value: 3, label: 'Q3 (Jul – Sep)' },
-  { value: 4, label: 'Q4 (Oct – Dec)' },
-];
-
-const HALF_YEAR_OPTIONS = [
-  { value: 1, label: 'H1 (Jan – Jun)' },
-  { value: 2, label: 'H2 (Jul – Dec)' },
 ];
 
 const MONTH_NAMES = MONTH_OPTIONS.map(m => m.label);
@@ -166,15 +154,39 @@ const getFallbackBudgetData = (periodType: BudgetPeriodType, periodVal: number, 
   return { mockBudgets, mockSummary };
 };
 
-export const BudgetsView: React.FC = () => {
-  const currentDate = new Date();
+export interface BudgetsViewProps {
+  selectedMonth?: number;
+  selectedYear?: number;
+  periodType?: PeriodType;
+  selectedQuarter?: number;
+  selectedHalf?: number;
+}
+
+export const BudgetsView: React.FC<BudgetsViewProps> = ({
+  selectedMonth: propMonth,
+  selectedYear: propYear,
+  periodType: propPeriodType,
+  selectedQuarter: propQuarter,
+  selectedHalf: propHalf
+}) => {
 
   // Period View state
   const [activePeriod, setActivePeriod] = useState<BudgetPeriodType>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<number>(9); // Default to Sept 2026 for demo data
-  const [selectedQuarter, setSelectedQuarter] = useState<number>(3); // Q3
-  const [selectedHalf, setSelectedHalf] = useState<number>(2); // H2
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedMonth, setSelectedMonth] = useState<number>(propMonth || 4);
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(propQuarter || 2);
+  const [selectedHalf, setSelectedHalf] = useState<number>(propHalf || 1);
+  const [selectedYear, setSelectedYear] = useState<number>(propYear || 2026);
+
+  useEffect(() => {
+    if (propMonth !== undefined) setSelectedMonth(propMonth);
+    if (propYear !== undefined) setSelectedYear(propYear);
+    if (propQuarter !== undefined) setSelectedQuarter(propQuarter);
+    if (propHalf !== undefined) setSelectedHalf(propHalf);
+    if (propPeriodType !== undefined) {
+      const mapped: BudgetPeriodType = propPeriodType === 'half_year' ? 'half_yearly' : propPeriodType;
+      setActivePeriod(mapped);
+    }
+  }, [propMonth, propYear, propQuarter, propHalf, propPeriodType]);
 
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [summary, setSummary] = useState<BudgetSummary | null>(null);
@@ -249,15 +261,6 @@ export const BudgetsView: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [successMsg]);
-
-  const handleResetToCurrent = () => {
-    const curMonth = currentDate.getMonth() + 1;
-    const curYear = currentDate.getFullYear();
-    setSelectedMonth(curMonth);
-    setSelectedQuarter(Math.floor((curMonth - 1) / 3) + 1);
-    setSelectedHalf(curMonth <= 6 ? 1 : 2);
-    setSelectedYear(curYear);
-  };
 
   // Open create modal
   const handleOpenCreateModal = () => {
@@ -393,102 +396,6 @@ export const BudgetsView: React.FC = () => {
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          
-          {/* ── Unified Period Filter Dropdowns (Income-style) ── */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-input)',
-            padding: '2px 8px',
-            gap: '0',
-            boxShadow: 'var(--shadow-sm)'
-          }}>
-            <Calendar size={16} color="var(--secondary-text)" style={{ flexShrink: 0 }} />
-
-            {/* Period Type Dropdown */}
-            <CustomSelect
-              value={activePeriod}
-              onChange={(val) => setActivePeriod(val as BudgetPeriodType)}
-              options={[
-                { value: 'monthly', label: 'Monthly' },
-                { value: 'quarterly', label: 'Quarterly' },
-                { value: 'half_yearly', label: 'Half-Yearly' },
-                { value: 'yearly', label: 'Yearly' }
-              ]}
-              size="sm"
-              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
-            />
-
-            {/* Divider */}
-            <span style={{ width: '1px', height: '18px', backgroundColor: 'var(--border)', flexShrink: 0 }} />
-
-            {/* Period Value Dropdown — Monthly */}
-            {activePeriod === 'monthly' && (
-              <CustomSelect
-                value={selectedMonth}
-                onChange={(val) => setSelectedMonth(Number(val))}
-                options={MONTH_OPTIONS.map((m) => ({ value: m.value, label: m.label }))}
-                size="sm"
-                buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
-              />
-            )}
-
-            {/* Period Value Dropdown — Quarterly */}
-            {activePeriod === 'quarterly' && (
-              <CustomSelect
-                value={selectedQuarter}
-                onChange={(val) => setSelectedQuarter(Number(val))}
-                options={QUARTER_OPTIONS.map((q) => ({ value: q.value, label: q.label }))}
-                size="sm"
-                buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
-              />
-            )}
-
-            {/* Period Value Dropdown — Half-Yearly */}
-            {activePeriod === 'half_yearly' && (
-              <CustomSelect
-                value={selectedHalf}
-                onChange={(val) => setSelectedHalf(Number(val))}
-                options={HALF_YEAR_OPTIONS.map((h) => ({ value: h.value, label: h.label }))}
-                size="sm"
-                buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
-              />
-            )}
-
-            {/* Divider before Year (not for yearly, which has no period value) */}
-            {activePeriod !== 'yearly' && (
-              <span style={{ width: '1px', height: '18px', backgroundColor: 'var(--border)', flexShrink: 0 }} />
-            )}
-
-            {/* Year Dropdown (Always Visible) */}
-            <CustomSelect
-              value={selectedYear}
-              onChange={(val) => setSelectedYear(Number(val))}
-              options={[2024, 2025, 2026, 2027, 2028].map((y) => ({ value: y, label: String(y) }))}
-              size="sm"
-              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
-            />
-          </div>
-
-          {/* Quick jump to Today */}
-          <button
-            onClick={handleResetToCurrent}
-            style={{
-              backgroundColor: 'transparent',
-              border: '1px solid var(--border)',
-              color: 'var(--secondary-text)',
-              fontSize: '12px',
-              fontWeight: 600,
-              padding: '7px 12px',
-              borderRadius: 'var(--radius-btn)',
-              cursor: 'pointer'
-            }}
-          >
-            Today
-          </button>
-
           {/* Set New Budget Button */}
           <button
             onClick={handleOpenCreateModal}

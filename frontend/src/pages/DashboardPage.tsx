@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   TrendingUp, 
   LayoutDashboard, 
@@ -15,10 +15,7 @@ import {
   Sun, 
   Moon,
   Sparkles,
-  PlusCircle,
-  Calendar,
-  ChevronDown,
-  Check
+  PlusCircle
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
@@ -27,6 +24,7 @@ import { ExpensePage } from './ExpensePage';
 import { BudgetsView } from '../components/BudgetsView';
 import { GoalsView } from '../components/GoalsView';
 import { DashboardView } from '../components/DashboardView';
+import { PeriodFilterDropdown } from '../components/PeriodFilterDropdown';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -50,26 +48,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   const [selectedMonth, setSelectedMonth] = useState<number>(4); // April 2026
   const [selectedQuarter, setSelectedQuarter] = useState<number>(2); // Q2 2026
   const [selectedHalf, setSelectedHalf] = useState<number>(1); // H1 2026
-  const [showPeriodMenu, setShowPeriodMenu] = useState<boolean>(false);
-  const periodMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close period dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (periodMenuRef.current && !periodMenuRef.current.contains(e.target as Node)) {
-        setShowPeriodMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const monthsShort = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthsList = [
-    { val: 1, label: 'Jan' }, { val: 2, label: 'Feb' }, { val: 3, label: 'Mar' }, { val: 4, label: 'Apr' },
-    { val: 5, label: 'May' }, { val: 6, label: 'Jun' }, { val: 7, label: 'Jul' }, { val: 8, label: 'Aug' },
-    { val: 9, label: 'Sep' }, { val: 10, label: 'Oct' }, { val: 11, label: 'Nov' }, { val: 12, label: 'Dec' },
-  ];
 
   let periodLabel = `${monthsShort[selectedMonth]} ${selectedYear}`;
   if (periodType === 'quarterly') {
@@ -388,283 +368,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           {/* Right Header Tools */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             {/* Header Period Filter Dropdown: Monthly, Quarterly, Half Year, Year (defaults to Apr 2026) */}
-            <div style={{ position: 'relative' }} ref={periodMenuRef}>
-              <button
-                onClick={() => setShowPeriodMenu((prev) => !prev)}
-                style={{
-                  height: '38px',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  backgroundColor: showPeriodMenu ? 'var(--light-accent)' : 'var(--card-subtle)',
-                  border: `1px solid ${showPeriodMenu ? 'var(--accent)' : 'var(--border)'}`,
-                  color: showPeriodMenu ? 'var(--accent)' : 'var(--main-text)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  cursor: 'pointer',
-                  borderRadius: 'var(--radius-btn)',
-                  transition: 'all 0.15s ease'
-                }}
-                title="Filter by Monthly, Quarterly, Half Year, or Year"
-              >
-                <Calendar size={15} color={showPeriodMenu ? 'var(--accent)' : 'var(--secondary-text)'} />
-                <span>{periodLabel}</span>
-                <ChevronDown
-                  size={14}
-                  style={{
-                    transform: showPeriodMenu ? 'rotate(180deg)' : 'none',
-                    transition: 'transform 0.15s ease'
-                  }}
-                />
-              </button>
-
-              {/* Floating Period Filter Popover */}
-              {showPeriodMenu && (
-                <div style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 8px)',
-                  right: 0,
-                  width: '320px',
-                  backgroundColor: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-card)',
-                  boxShadow: 'var(--shadow-lg)',
-                  padding: '16px',
-                  zIndex: 100,
-                  animation: 'fadeIn 0.15s ease'
-                }}>
-                  {/* Period Mode Selector Tabs */}
-                  <div style={{
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    color: 'var(--secondary-text)',
-                    fontWeight: 700,
-                    marginBottom: '8px'
-                  }}>
-                    Select Period View
-                  </div>
-
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: '4px',
-                    backgroundColor: 'var(--card-subtle)',
-                    padding: '3px',
-                    borderRadius: '8px',
-                    marginBottom: '14px',
-                    border: '1px solid var(--border)'
-                  }}>
-                    {[
-                      { id: 'monthly', label: 'Monthly' },
-                      { id: 'quarterly', label: 'Quarterly' },
-                      { id: 'half_year', label: 'Half Year' },
-                      { id: 'yearly', label: 'Year' }
-                    ].map((tab) => {
-                      const isActive = periodType === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          onClick={() => setPeriodType(tab.id as any)}
-                          style={{
-                            padding: '6px 2px',
-                            fontSize: '11px',
-                            fontWeight: isActive ? 700 : 500,
-                            backgroundColor: isActive ? 'var(--accent)' : 'transparent',
-                            color: isActive ? '#FFFFFF' : 'var(--secondary-text)',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                            textAlign: 'center'
-                          }}
-                        >
-                          {tab.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Year Selector */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '12px',
-                    paddingBottom: '10px',
-                    borderBottom: '1px solid var(--border)'
-                  }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--secondary-text)' }}>Year</span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {[2024, 2025, 2026, 2027].map((yr) => (
-                        <button
-                          key={yr}
-                          onClick={() => setSelectedYear(yr)}
-                          style={{
-                            padding: '3px 8px',
-                            fontSize: '11.5px',
-                            fontWeight: selectedYear === yr ? 700 : 500,
-                            backgroundColor: selectedYear === yr ? 'var(--accent)' : 'var(--card-subtle)',
-                            color: selectedYear === yr ? '#FFFFFF' : 'var(--main-text)',
-                            border: `1px solid ${selectedYear === yr ? 'var(--accent)' : 'var(--border)'}`,
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {yr}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Sub-period Picker based on mode */}
-                  {periodType === 'monthly' && (
-                    <div>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
-                        Select Month (4x3 Grid)
-                      </div>
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(4, 1fr)',
-                        gap: '6px'
-                      }}>
-                        {monthsList.map((m) => {
-                          const isSel = selectedMonth === m.val;
-                          return (
-                            <button
-                              key={m.val}
-                              onClick={() => {
-                                setSelectedMonth(m.val);
-                                setShowPeriodMenu(false);
-                              }}
-                              style={{
-                                padding: '8px 4px',
-                                fontSize: '11.5px',
-                                fontWeight: isSel ? 700 : 500,
-                                backgroundColor: isSel ? 'var(--accent)' : 'var(--card-subtle)',
-                                color: isSel ? '#FFFFFF' : 'var(--main-text)',
-                                border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              {m.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {periodType === 'quarterly' && (
-                    <div>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
-                        Select Quarter
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                        {[
-                          { q: 1, label: 'Q1', desc: 'Jan – Mar' },
-                          { q: 2, label: 'Q2', desc: 'Apr – Jun' },
-                          { q: 3, label: 'Q3', desc: 'Jul – Sep' },
-                          { q: 4, label: 'Q4', desc: 'Oct – Dec' },
-                        ].map((item) => {
-                          const isSel = selectedQuarter === item.q;
-                          return (
-                            <button
-                              key={item.q}
-                              onClick={() => {
-                                setSelectedQuarter(item.q);
-                                setShowPeriodMenu(false);
-                              }}
-                              style={{
-                                padding: '10px 8px',
-                                textAlign: 'left',
-                                backgroundColor: isSel ? 'var(--light-accent)' : 'var(--card-subtle)',
-                                border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
-                                borderRadius: '6px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <div style={{ fontSize: '13px', fontWeight: 700, color: isSel ? 'var(--accent)' : 'var(--primary)' }}>
-                                {item.label}
-                              </div>
-                              <div style={{ fontSize: '10.5px', color: 'var(--secondary-text)' }}>
-                                {item.desc}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {periodType === 'half_year' && (
-                    <div>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
-                        Select Half Year
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[
-                          { h: 1, label: 'H1: First Half', desc: 'January – June (6 Months)' },
-                          { h: 2, label: 'H2: Second Half', desc: 'July – December (6 Months)' },
-                        ].map((item) => {
-                          const isSel = selectedHalf === item.h;
-                          return (
-                            <button
-                              key={item.h}
-                              onClick={() => {
-                                setSelectedHalf(item.h);
-                                setShowPeriodMenu(false);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '10px 12px',
-                                backgroundColor: isSel ? 'var(--light-accent)' : 'var(--card-subtle)',
-                                border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
-                                borderRadius: '6px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontSize: '13px', fontWeight: 700, color: isSel ? 'var(--accent)' : 'var(--primary)' }}>
-                                  {item.label}
-                                </div>
-                                <div style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>
-                                  {item.desc}
-                                </div>
-                              </div>
-                              {isSel && <Check size={16} color="var(--accent)" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {periodType === 'yearly' && (
-                    <div style={{ padding: '8px 0', textAlign: 'center' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginBottom: '4px' }}>
-                        Full Year {selectedYear}
-                      </div>
-                      <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)', marginBottom: '12px' }}>
-                        Aggregates all 12 months (Jan 1 – Dec 31)
-                      </div>
-                      <button
-                        onClick={() => setShowPeriodMenu(false)}
-                        className="btn-primary"
-                        style={{ width: '100%', padding: '8px', fontSize: '12px' }}
-                      >
-                        View Full Year {selectedYear}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <PeriodFilterDropdown
+              periodType={periodType}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              selectedQuarter={selectedQuarter}
+              selectedHalf={selectedHalf}
+              onPeriodTypeChange={(t) => setPeriodType(t)}
+              onYearChange={(y) => setSelectedYear(y)}
+              onMonthChange={(m) => setSelectedMonth(m)}
+              onQuarterChange={(q) => setSelectedQuarter(q)}
+              onHalfChange={(h) => setSelectedHalf(h)}
+            />
 
             {/* Notification Bell */}
             <button 
@@ -736,12 +451,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
 
         {/* Body Content */}
         {activeTab === 'income' ? (
-          <IncomePage />
+          <IncomePage
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            periodType={periodType}
+            selectedQuarter={selectedQuarter}
+            selectedHalf={selectedHalf}
+            periodLabel={periodLabel}
+          />
         ) : activeTab === 'transactions' || activeTab === 'expenses' ? (
-          <ExpensePage />
+          <ExpensePage
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            periodType={periodType}
+            selectedQuarter={selectedQuarter}
+            selectedHalf={selectedHalf}
+            periodLabel={periodLabel}
+          />
         ) : activeTab === 'budgets' ? (
           <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
-            <BudgetsView />
+            <BudgetsView
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              periodType={periodType}
+              selectedQuarter={selectedQuarter}
+              selectedHalf={selectedHalf}
+            />
           </main>
         ) : activeTab === 'goals' ? (
           <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
