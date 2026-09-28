@@ -6,6 +6,7 @@ from app.api.v1.endpoints.user import (
     expense as user_expense,
     budgets as user_budgets,
     dashboard as user_dashboard,
+    goals as user_goals,
 )
 from app.api.v1.endpoints.admin import overview as admin_overview, users as admin_users
 
@@ -26,8 +27,7 @@ user_router.include_router(user_income.router, prefix="/income", tags=["User - I
 user_router.include_router(user_expense.router, prefix="/expenses", tags=["User - Expenses"])
 user_router.include_router(user_expense.router, prefix="/transactions", tags=["User - Transactions"])
 user_router.include_router(user_budgets.router, prefix="/budgets", tags=["User - Budgets"])
-# Future teammate endpoints attach here:
-# user_router.include_router(goals.router, prefix="/goals", tags=["User - Goals"])
+user_router.include_router(user_goals.router, prefix="/goals", tags=["User - Goals"])
 # user_router.include_router(analytics.router, prefix="/analytics", tags=["User - Analytics"])
 
 api_router.include_router(user_router)

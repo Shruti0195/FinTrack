@@ -25,6 +25,7 @@ import api from '../api/client';
 import { IncomePage } from './IncomePage';
 import { ExpensePage } from './ExpensePage';
 import { BudgetsView } from '../components/BudgetsView';
+import { GoalsView } from '../components/GoalsView';
 import { DashboardView } from '../components/DashboardView';
 
 interface DashboardPageProps {
@@ -741,6 +742,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         ) : activeTab === 'budgets' ? (
           <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
             <BudgetsView />
+          </main>
+        ) : activeTab === 'goals' ? (
+          <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
+            <GoalsView />
           </main>
         ) : (
           <DashboardView
