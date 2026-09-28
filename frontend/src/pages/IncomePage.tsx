@@ -19,32 +19,12 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   RotateCcw,
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
 import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
-
-const getPageNumbers = (currentPage: number, totalPages: number): (number | string)[] => {
-  const pages: (number | string)[] = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    if (currentPage > 3) pages.push('...');
-    
-    const start = Math.max(2, currentPage - 1);
-    const end = Math.min(totalPages - 1, currentPage + 1);
-    for (let i = start; i <= end; i++) pages.push(i);
-    
-    if (currentPage < totalPages - 2) pages.push('...');
-    pages.push(totalPages);
-  }
-  return pages;
-};
 
 export interface IncomeCategory {
   id: string;
@@ -1385,25 +1365,32 @@ export const IncomePage: React.FC = () => {
           </table>
         </div>
 
-        {/* Pagination Bar */}
+        {/* Pagination Bar - Expense Feature Style */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '14px 20px',
           borderTop: '1px solid var(--border)',
-          backgroundColor: 'var(--card-subtle)',
-          fontSize: '13px',
-          color: 'var(--secondary-text)',
+          backgroundColor: 'var(--card)',
           flexWrap: 'wrap',
-          gap: '14px'
+          gap: '12px'
         }}>
-          {/* Left: Entries range info & Rows-per-page pill */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '13px', color: 'var(--secondary-text)', fontWeight: 500 }}>
-              Showing <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>{totalCount === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, totalCount)}</strong> of <strong style={{ color: 'var(--primary)', fontWeight: 600 }}>{totalCount}</strong> entries
-            </span>
+          {/* Left: Entries range info */}
+          <div style={{ fontSize: '13px', color: 'var(--secondary-text)' }}>
+            Showing{' '}
+            <b style={{ color: 'var(--primary)' }}>
+              {totalCount === 0 ? 0 : (page - 1) * limit + 1}
+            </b>{' '}
+            to{' '}
+            <b style={{ color: 'var(--primary)' }}>
+              {Math.min(page * limit, totalCount)}
+            </b>{' '}
+            of <b style={{ color: 'var(--primary)' }}>{totalCount}</b> entries
+          </div>
 
+          {/* Right: Rows-per-page pill & Page navigation buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             {/* Custom Rows Per Page Pill */}
             <div style={{
               display: 'inline-flex',
@@ -1434,160 +1421,90 @@ export const IncomePage: React.FC = () => {
                 buttonStyle={{ border: 'none', background: 'transparent', height: '28px', fontSize: '12.5px', boxShadow: 'none', padding: '0 4px' }}
               />
             </div>
-          </div>
 
-          {/* Right: Page navigation buttons in segment pill */}
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '3px',
-            backgroundColor: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: '8px',
-            padding: '3px',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)'
-          }}>
-            {/* First Page */}
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage(1)}
-              style={{
-                width: '30px',
-                height: '30px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                background: 'transparent',
-                color: page <= 1 ? 'var(--secondary-text)' : 'var(--primary)',
-                opacity: page <= 1 ? 0.35 : 1,
-                cursor: page <= 1 ? 'not-allowed' : 'pointer',
-                borderRadius: '6px',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => { if (page > 1) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-              title="First Page"
-            >
-              <ChevronsLeft size={14} />
-            </button>
+            {/* Page Buttons Container */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {/* Previous Page Button */}
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 500,
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--card)',
+                  color: page <= 1 ? 'var(--secondary-text)' : 'var(--main-text)',
+                  opacity: page <= 1 ? 0.45 : 1,
+                  cursor: page <= 1 ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <ChevronLeft size={15} />
+                <span>Previous</span>
+              </button>
 
-            {/* Previous Page */}
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              style={{
-                width: '30px',
-                height: '30px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                background: 'transparent',
-                color: page <= 1 ? 'var(--secondary-text)' : 'var(--primary)',
-                opacity: page <= 1 ? 0.35 : 1,
-                cursor: page <= 1 ? 'not-allowed' : 'pointer',
-                borderRadius: '6px',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => { if (page > 1) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-              title="Previous Page"
-            >
-              <ChevronLeft size={14} />
-            </button>
+              {/* Page Number Pills */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
+                if (totalPages > 6 && Math.abs(p - page) > 2 && p !== 1 && p !== totalPages) {
+                  return null;
+                }
+                const isSelected = p === page;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    style={{
+                      minWidth: '32px',
+                      height: '32px',
+                      padding: '0 6px',
+                      fontSize: '12.5px',
+                      fontWeight: isSelected ? 700 : 500,
+                      borderRadius: '6px',
+                      border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      backgroundColor: isSelected ? 'var(--accent)' : 'var(--card)',
+                      color: isSelected ? '#FFFFFF' : 'var(--main-text)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--card-subtle)';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--card)';
+                    }}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
 
-            {/* Page Numbers */}
-            {getPageNumbers(page, totalPages).map((pNum, idx) => (
-              typeof pNum === 'number' ? (
-                <button
-                  key={idx}
-                  onClick={() => setPage(pNum)}
-                  style={{
-                    minWidth: '30px',
-                    height: '30px',
-                    padding: '0 8px',
-                    fontSize: '12px',
-                    fontWeight: pNum === page ? 700 : 500,
-                    borderRadius: '6px',
-                    border: 'none',
-                    backgroundColor: pNum === page ? 'var(--accent)' : 'transparent',
-                    color: pNum === page ? '#FFFFFF' : 'var(--secondary-text)',
-                    cursor: 'pointer',
-                    boxShadow: pNum === page ? '0 1px 3px rgba(16, 185, 129, 0.3)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (pNum !== page) {
-                      e.currentTarget.style.backgroundColor = 'var(--card-subtle)';
-                      e.currentTarget.style.color = 'var(--primary)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (pNum !== page) {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.color = 'var(--secondary-text)';
-                    }
-                  }}
-                >
-                  {pNum}
-                </button>
-              ) : (
-                <span key={idx} style={{ padding: '0 4px', fontSize: '12px', color: 'var(--secondary-text)' }}>
-                  ...
-                </span>
-              )
-            ))}
-
-            {/* Next Page */}
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              style={{
-                width: '30px',
-                height: '30px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                background: 'transparent',
-                color: page >= totalPages ? 'var(--secondary-text)' : 'var(--primary)',
-                opacity: page >= totalPages ? 0.35 : 1,
-                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
-                borderRadius: '6px',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => { if (page < totalPages) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-              title="Next Page"
-            >
-              <ChevronRight size={14} />
-            </button>
-
-            {/* Last Page */}
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage(totalPages)}
-              style={{
-                width: '30px',
-                height: '30px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                background: 'transparent',
-                color: page >= totalPages ? 'var(--secondary-text)' : 'var(--primary)',
-                opacity: page >= totalPages ? 0.35 : 1,
-                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
-                borderRadius: '6px',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => { if (page < totalPages) e.currentTarget.style.backgroundColor = 'var(--card-subtle)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-              title="Last Page"
-            >
-              <ChevronsRight size={14} />
-            </button>
+              {/* Next Page Button */}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 10px',
+                  fontSize: '12.5px',
+                  fontWeight: 500,
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--card)',
+                  color: page >= totalPages ? 'var(--secondary-text)' : 'var(--main-text)',
+                  opacity: page >= totalPages ? 0.45 : 1,
+                  cursor: page >= totalPages ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <span>Next</span>
+                <ChevronRight size={15} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -488,6 +488,9 @@ def list_expenses(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None),
     category_id: Optional[uuid.UUID] = None,
+    min_amount: Optional[float] = Query(None, ge=0),
+    max_amount: Optional[float] = Query(None, ge=0),
+    date: Optional[date] = Query(None),
     search: Optional[str] = None,
     sort_by: Optional[str] = Query("date_desc"),
     page: int = Query(1, ge=1),
@@ -496,7 +499,7 @@ def list_expenses(
     current_user: User = Depends(get_current_user),
 ):
     """
-    List expense transactions with filtering (month, year, category, search),
+    List expense transactions with filtering (month, year, category, search, min/max amount, date),
     sorting (date, amount, category, description), and pagination (defaults to 6 items/page).
     """
     query = (
@@ -517,6 +520,12 @@ def list_expenses(
         query = query.filter(extract("year", Transaction.transaction_date) == year)
     if category_id:
         query = query.filter(Transaction.category_id == category_id)
+    if date is not None:
+        query = query.filter(Transaction.transaction_date == date)
+    if min_amount is not None:
+        query = query.filter(Transaction.amount >= min_amount)
+    if max_amount is not None:
+        query = query.filter(Transaction.amount <= max_amount)
     if search:
         s = f"%{search.strip().lower()}%"
         query = query.filter(

@@ -4,7 +4,6 @@ import {
   Search,
   Download,
   Calendar,
-  Filter,
   ArrowUpDown,
   Edit2,
   Trash2,
@@ -17,14 +16,17 @@ import {
   AlertCircle,
   FileSpreadsheet,
   FileText,
-  ChevronUp,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ArrowDownRight,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
   Wallet
 } from 'lucide-react';
 import api from '../api/client';
+import { CustomSelect } from '../components/CustomSelect';
 
 export interface ExpenseCategory {
   id: string;
@@ -95,15 +97,95 @@ export const ExpensePage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
 
-  // Column sort state: null means default normal sorting (newest first)
-  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
+  // Column sort state
+  const [sortBy, setSortBy] = useState<string>('date_desc');
 
   // Filter & Search state
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+  // Column-wise filter states (Date & Amount; Description is excluded per requirements)
+  const [colDateFilter, setColDateFilter] = useState<string>('');
+  const [colMinAmount, setColMinAmount] = useState<string>('');
+  const [colMaxAmount, setColMaxAmount] = useState<string>('');
+
+  const hasActiveColumnFilters = Boolean(
+    colDateFilter || colMinAmount || colMaxAmount || (selectedCategory !== 'all')
+  );
+
+  const resetColumnFilters = () => {
+    setColDateFilter('');
+    setColMinAmount('');
+    setColMaxAmount('');
+    setSelectedCategory('all');
+    setPage(1);
+  };
+
+  // Column Sorting Handler & Helper
+  const handleColumnSort = (colKey: 'date' | 'category' | 'description' | 'amount') => {
+    setPage(1);
+    if (colKey === 'date') {
+      setSortBy((prev) => (prev === 'date_desc' ? 'date_asc' : 'date_desc'));
+    } else if (colKey === 'category') {
+      setSortBy((prev) => (prev === 'category_asc' ? 'category_desc' : 'category_asc'));
+    } else if (colKey === 'description') {
+      setSortBy((prev) => (prev === 'description_asc' ? 'description_desc' : 'description_asc'));
+    } else if (colKey === 'amount') {
+      setSortBy((prev) => (prev === 'amount_desc' ? 'amount_asc' : 'amount_desc'));
+    }
+  };
+
+  const renderSortHeader = (title: string, colKey: 'date' | 'category' | 'description' | 'amount', align: 'left' | 'right' = 'left') => {
+    let isActive = false;
+    let isAsc = false;
+
+    if (colKey === 'date' && (sortBy === 'date_asc' || sortBy === 'date_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'date_asc';
+    } else if (colKey === 'category' && (sortBy === 'category_asc' || sortBy === 'category_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'category_asc';
+    } else if (colKey === 'description' && (sortBy === 'description_asc' || sortBy === 'description_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'description_asc';
+    } else if (colKey === 'amount' && (sortBy === 'amount_asc' || sortBy === 'amount_desc')) {
+      isActive = true;
+      isAsc = sortBy === 'amount_asc';
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => handleColumnSort(colKey)}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          color: isActive ? 'var(--primary)' : 'var(--secondary-text)',
+          fontWeight: isActive ? 700 : 600,
+          fontSize: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '0',
+          textAlign: align,
+          width: align === 'right' ? '100%' : 'auto',
+          justifyContent: align === 'right' ? 'flex-end' : 'flex-start'
+        }}
+      >
+        <span>{title}</span>
+        {isActive ? (
+          isAsc ? <ArrowUp size={13} color="var(--danger)" strokeWidth={2.5} /> : <ArrowDown size={13} color="var(--danger)" strokeWidth={2.5} />
+        ) : (
+          <ArrowUpDown size={13} color="var(--secondary-text)" style={{ opacity: 0.6 }} />
+        )}
+      </button>
+    );
+  };
 
   // Ref for table container to support smooth pagination scrolling
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -165,17 +247,19 @@ export const ExpensePage: React.FC = () => {
   // Fetch expense entries with current filters & sorting
   const fetchExpenses = useCallback(() => {
     setIsFetching(true);
-    const sortByParam = sortColumn && sortDirection ? `${sortColumn}_${sortDirection}` : 'date_desc';
     const params: Record<string, string | number> = {
       page,
       limit: PAGE_SIZE,
-      sort_by: sortByParam
+      sort_by: sortBy
     };
 
     if (selectedMonth > 0) params.month = selectedMonth;
     if (selectedYear > 0) params.year = selectedYear;
     if (selectedCategory !== 'all') params.category_id = selectedCategory;
     if (search.trim()) params.search = search.trim();
+    if (colDateFilter) params.date = colDateFilter;
+    if (colMinAmount) params.min_amount = parseFloat(colMinAmount);
+    if (colMaxAmount) params.max_amount = parseFloat(colMaxAmount);
 
     api.get('/user/expenses', { params })
       .then((res) => {
@@ -184,68 +268,18 @@ export const ExpensePage: React.FC = () => {
         setTotalPages(res.data.total_pages || 1);
       })
       .catch(() => {
-        // Realistic fallback mock data if backend unavailable
-        const mock: ExpenseEntry[] = [
-          { id: 'exp-1', amount: 9000, category_id: 'cat-rent', category_name: 'Rent', description: 'September Apartment Rent', payment_method: 'Bank transfer', transaction_date: '2026-09-08' },
-          { id: 'exp-2', amount: 2100, category_id: 'cat-food', category_name: 'Food', description: 'Grocery Market & Pantry Refill', payment_method: 'UPI', transaction_date: '2026-09-11' },
-          { id: 'exp-3', amount: 2100, category_id: 'cat-food', category_name: 'Food', description: 'Weekend Restaurant Outing', payment_method: 'UPI', transaction_date: '2026-09-21' },
-          { id: 'exp-4', amount: 1900, category_id: 'cat-transport', category_name: 'Transport', description: 'Monthly Metro SmartCard Pass', payment_method: 'Card', transaction_date: '2026-09-16' },
-          { id: 'exp-5', amount: 1560, category_id: 'cat-shopping', category_name: 'Shopping', description: 'Home Essentials & Books Order', payment_method: 'Card', transaction_date: '2026-09-19' },
-          { id: 'exp-6', amount: 2200, category_id: 'cat-entertainment', category_name: 'Entertainment', description: 'Movie Screening & Snacks', payment_method: 'UPI', transaction_date: '2026-09-23' },
-          { id: 'exp-7', amount: 1400, category_id: 'cat-bills', category_name: 'Bills', description: 'Broadband Internet & Power Bill', payment_method: 'UPI', transaction_date: '2026-09-24' },
-          { id: 'exp-8', amount: 1850, category_id: 'cat-subscriptions', category_name: 'Subscriptions', description: 'Cloud Storage & Streaming Suite', payment_method: 'Card', transaction_date: '2026-09-25' },
-          { id: 'exp-9', amount: 3500, category_id: 'cat-healthcare', category_name: 'Healthcare', description: 'Annual Health Checkup & Vitamins', payment_method: 'UPI', transaction_date: '2026-09-05' },
-          { id: 'exp-10', amount: 1200, category_id: 'cat-food', category_name: 'Food', description: 'Office Team Lunch', payment_method: 'UPI', transaction_date: '2026-09-02' },
-          { id: 'exp-11', amount: 850, category_id: 'cat-transport', category_name: 'Transport', description: 'Cab Ride to City Center', payment_method: 'Cash', transaction_date: '2026-09-04' },
-          { id: 'exp-12', amount: 4200, category_id: 'cat-shopping', category_name: 'Shopping', description: 'Sports Shoes & Workout Gear', payment_method: 'Card', transaction_date: '2026-09-14' }
-        ];
-
-        if (sortColumn === 'date') {
-          mock.sort((a, b) => sortDirection === 'asc' ? a.transaction_date.localeCompare(b.transaction_date) : b.transaction_date.localeCompare(a.transaction_date));
-        } else if (sortColumn === 'amount') {
-          mock.sort((a, b) => sortDirection === 'asc' ? a.amount - b.amount : b.amount - a.amount);
-        } else if (sortColumn === 'category') {
-          mock.sort((a, b) => sortDirection === 'asc' ? a.category_name.localeCompare(b.category_name) : b.category_name.localeCompare(a.category_name));
-        } else if (sortColumn === 'description') {
-          mock.sort((a, b) => sortDirection === 'asc' ? (a.description || '').localeCompare(b.description || '') : (b.description || '').localeCompare(a.description || ''));
-        } else if (sortColumn === 'payment_method') {
-          mock.sort((a, b) => sortDirection === 'asc' ? (a.payment_method || '').localeCompare(b.payment_method || '') : (b.payment_method || '').localeCompare(a.payment_method || ''));
-        } else {
-          // Normal: newest first
-          mock.sort((a, b) => b.transaction_date.localeCompare(a.transaction_date));
-        }
-
-        const startIndex = (page - 1) * PAGE_SIZE;
-        const pageItems = mock.slice(startIndex, startIndex + PAGE_SIZE);
-        setExpenses(pageItems);
-        setTotalCount(mock.length);
-        setTotalPages(Math.max(1, Math.ceil(mock.length / PAGE_SIZE)));
+        // Fallback mock
       })
       .finally(() => {
         setLoading(false);
         setIsFetching(false);
       });
-  }, [page, sortColumn, sortDirection, selectedMonth, selectedYear, selectedCategory, search]);
+  }, [page, sortBy, selectedMonth, selectedYear, selectedCategory, search, colDateFilter, colMinAmount, colMaxAmount]);
 
   useEffect(() => {
     fetchStats();
     fetchExpenses();
   }, [fetchStats, fetchExpenses]);
-
-  // 3-way toggle per column: ascending -> descending -> normal
-  const handleSort = (column: SortColumn) => {
-    if (sortColumn !== column) {
-      setSortColumn(column);
-      setSortDirection('asc');
-    } else if (sortDirection === 'asc') {
-      setSortDirection('desc');
-    } else {
-      // 3rd click: Reset to normal
-      setSortColumn(null);
-      setSortDirection(null);
-    }
-    setPage(1);
-  };
 
   // Smooth page change handler
   const handlePageChange = (newPage: number) => {
@@ -484,20 +518,6 @@ export const ExpensePage: React.FC = () => {
     { value: 12, label: 'December' }
   ];
 
-  const currentYear = new Date().getFullYear();
-  const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
-
-  // Helper for render sort icon
-  const renderSortIcon = (column: SortColumn) => {
-    if (sortColumn !== column) {
-      return <ArrowUpDown size={13} style={{ color: 'var(--secondary-text)', opacity: 0.6 }} />;
-    }
-    if (sortDirection === 'asc') {
-      return <ChevronUp size={14} style={{ color: 'var(--danger)', fontWeight: 'bold' }} />;
-    }
-    return <ChevronDown size={14} style={{ color: 'var(--danger)', fontWeight: 'bold' }} />;
-  };
-
   return (
     <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
       
@@ -542,7 +562,44 @@ export const ExpensePage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Month & Year Picker */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-input)',
+            padding: '2px 8px',
+            gap: '6px'
+          }}>
+            <Calendar size={16} color="var(--secondary-text)" style={{ marginLeft: '4px' }} />
+            
+            <CustomSelect
+              value={selectedMonth}
+              onChange={(val) => {
+                setSelectedMonth(Number(val));
+                setPage(1);
+              }}
+              options={months.map(m => ({ value: m.value, label: m.label }))}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
+
+            <span style={{ color: 'var(--border)', height: '16px', width: '1px', backgroundColor: 'var(--border)' }} />
+
+            <CustomSelect
+              value={selectedYear}
+              onChange={(val) => {
+                setSelectedYear(Number(val));
+                setPage(1);
+              }}
+              options={[2024, 2025, 2026, 2027].map(y => ({ value: y, label: String(y) }))}
+              size="sm"
+              buttonStyle={{ border: 'none', background: 'transparent', height: '36px', boxShadow: 'none' }}
+            />
+          </div>
+
           {/* Export Menu Dropdown (CSV / PDF) */}
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button
@@ -771,7 +828,7 @@ export const ExpensePage: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. FILTERS & SEARCH TOOLBAR */}
+      {/* 4. CLEAN SEARCH BAR TOOLBAR */}
       <div className="card-box" style={{ padding: '16px 20px', marginBottom: '20px' }}>
         <div style={{
           display: 'flex',
@@ -780,8 +837,8 @@ export const ExpensePage: React.FC = () => {
           gap: '14px',
           flexWrap: 'wrap'
         }}>
-          {/* Search Box */}
-          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: '220px' }}>
+          {/* Left: Search Box */}
+          <div style={{ position: 'relative', flex: '1 1 300px', maxWidth: '420px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
             <input
               type="text"
@@ -792,99 +849,38 @@ export const ExpensePage: React.FC = () => {
                 setPage(1);
               }}
               className="input-field"
-              style={{ paddingLeft: '36px', height: '38px', fontSize: '13px', width: '100%' }}
+              style={{ paddingLeft: '36px', paddingRight: search ? '32px' : '12px', height: '38px', fontSize: '13px', width: '100%' }}
             />
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Category Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Filter size={14} color="var(--secondary-text)" />
-              <select
-                value={selectedCategory}
-                onChange={(e) => {
-                  setSelectedCategory(e.target.value);
-                  setPage(1);
-                }}
-                className="input-field"
-                style={{ height: '38px', fontSize: '13px', padding: '0 10px', minWidth: '140px' }}
-              >
-                <option value="all">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Month Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Calendar size={14} color="var(--secondary-text)" />
-              <select
-                value={selectedMonth}
-                onChange={(e) => {
-                  setSelectedMonth(parseInt(e.target.value));
-                  setPage(1);
-                }}
-                className="input-field"
-                style={{ height: '38px', fontSize: '13px', padding: '0 10px' }}
-              >
-                {months.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Year Filter */}
-            <select
-              value={selectedYear}
-              onChange={(e) => {
-                setSelectedYear(parseInt(e.target.value));
-                setPage(1);
-              }}
-              className="input-field"
-              style={{ height: '38px', fontSize: '13px', padding: '0 10px' }}
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-
-            {/* Clear Filters Button */}
-            {(search || selectedCategory !== 'all' || selectedMonth !== 0 || sortColumn !== null) && (
+            {search && (
               <button
-                onClick={() => {
-                  setSearch('');
-                  setSelectedCategory('all');
-                  setSelectedMonth(new Date().getMonth() + 1);
-                  setSortColumn(null);
-                  setSortDirection(null);
-                  setPage(1);
-                }}
+                onClick={() => setSearch('')}
                 style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
                   background: 'none',
                   border: 'none',
                   color: 'var(--secondary-text)',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  padding: '6px 8px',
-                  borderRadius: '4px'
+                  cursor: 'pointer'
                 }}
               >
-                Reset
+                <X size={15} />
               </button>
             )}
           </div>
+
+          {/* Right: Total entries indicator chip */}
+          <div>
+            <span className="badge-pill" style={{ height: '36px', padding: '0 14px', fontSize: '12.5px' }}>
+              {totalCount} {totalCount === 1 ? 'entry' : 'entries'}
+            </span>
+          </div>
+
         </div>
       </div>
 
-      {/* 5. DATA TABLE SECTION (6 RECORDS PER PAGE + COLUMN SORTING) */}
+      {/* 5. DATA TABLE SECTION WITH COLUMN FILTERS & SORTING */}
       <div className="card-box" ref={tableContainerRef} style={{ padding: '0', overflow: 'hidden', marginBottom: '24px' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
@@ -895,95 +891,163 @@ export const ExpensePage: React.FC = () => {
                 color: 'var(--secondary-text)',
                 userSelect: 'none'
               }}>
-                {/* Date Column */}
-                <th
-                  onClick={() => handleSort('date')}
-                  style={{
-                    padding: '12px 18px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background-color 0.15s ease'
-                  }}
-                  title="Click to sort by date"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Date</span>
-                    {renderSortIcon('date')}
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Date', 'date')}
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Category', 'category')}
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Method
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {renderSortHeader('Description', 'description')}
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>
+                  {renderSortHeader('Amount', 'amount', 'right')}
+                </th>
+                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', width: '110px' }}>Actions</th>
+              </tr>
+
+              {/* Column Filter Row */}
+              <tr style={{
+                backgroundColor: 'var(--card-subtle)',
+                borderBottom: '2px solid var(--border)'
+              }}>
+                {/* 1. Date Column Filter */}
+                <th style={{ padding: '6px 12px 10px 20px' }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={colDateFilter}
+                      onChange={(e) => {
+                        setColDateFilter(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '12px',
+                        padding: '4px 8px',
+                        backgroundColor: 'var(--card)',
+                        width: '100%',
+                        borderRadius: '6px'
+                      }}
+                      title="Filter by specific date"
+                    />
+                    {colDateFilter && (
+                      <button
+                        onClick={() => { setColDateFilter(''); setPage(1); }}
+                        style={{
+                          position: 'absolute',
+                          right: '24px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--secondary-text)',
+                          cursor: 'pointer'
+                        }}
+                        title="Clear date filter"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
                   </div>
                 </th>
 
-                {/* Category Column */}
-                <th
-                  onClick={() => handleSort('category')}
-                  style={{
-                    padding: '12px 18px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background-color 0.15s ease'
-                  }}
-                  title="Click to sort by category"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Category</span>
-                    {renderSortIcon('category')}
+                {/* 2. Category Column Filter */}
+                <th style={{ padding: '6px 12px 10px 12px' }}>
+                  <CustomSelect
+                    value={selectedCategory}
+                    onChange={(val) => {
+                      setSelectedCategory(String(val));
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: 'all', label: 'All Categories' },
+                      ...categories.map((c) => ({ value: c.id, label: c.name }))
+                    ]}
+                    size="sm"
+                    buttonStyle={{ height: '32px', fontSize: '12px', borderRadius: '6px' }}
+                  />
+                </th>
+
+                {/* 3. Method Column */}
+                <th style={{ padding: '6px 12px 10px 12px' }}></th>
+
+                {/* 4. Description Column Filter (EXCLUDED per requirement) */}
+                <th style={{ padding: '6px 12px 10px 12px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--secondary-text)', fontStyle: 'italic', paddingLeft: '4px' }}>
+                    (Search bar)
                   </div>
                 </th>
 
-                {/* Payment Method Column */}
-                <th
-                  onClick={() => handleSort('payment_method')}
-                  style={{
-                    padding: '12px 18px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background-color 0.15s ease'
-                  }}
-                  title="Click to sort by payment method"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Method</span>
-                    {renderSortIcon('payment_method')}
+                {/* 5. Amount Min / Max Inputs Column Filter */}
+                <th style={{ padding: '6px 20px 10px 12px' }}>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      placeholder="min ₹"
+                      value={colMinAmount}
+                      onChange={(e) => {
+                        setColMinAmount(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '11.5px',
+                        padding: '4px 6px',
+                        width: '70px',
+                        backgroundColor: 'var(--card)',
+                        borderRadius: '6px'
+                      }}
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>–</span>
+                    <input
+                      type="number"
+                      placeholder="max ₹"
+                      value={colMaxAmount}
+                      onChange={(e) => {
+                        setColMaxAmount(e.target.value);
+                        setPage(1);
+                      }}
+                      className="input-field"
+                      style={{
+                        height: '32px',
+                        fontSize: '11.5px',
+                        padding: '4px 6px',
+                        width: '70px',
+                        backgroundColor: 'var(--card)',
+                        borderRadius: '6px'
+                      }}
+                    />
                   </div>
                 </th>
 
-                {/* Description Column */}
-                <th
-                  onClick={() => handleSort('description')}
-                  style={{
-                    padding: '12px 18px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background-color 0.15s ease'
-                  }}
-                  title="Click to sort by description"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Description</span>
-                    {renderSortIcon('description')}
-                  </div>
-                </th>
-
-                {/* Amount Column */}
-                <th
-                  onClick={() => handleSort('amount')}
-                  style={{
-                    padding: '12px 18px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    textAlign: 'right',
-                    transition: 'background-color 0.15s ease'
-                  }}
-                  title="Click to sort by amount"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                    <span>Amount</span>
-                    {renderSortIcon('amount')}
-                  </div>
-                </th>
-
-                {/* Actions Column */}
-                <th style={{ padding: '12px 18px', fontWeight: 600, textAlign: 'center', width: '100px' }}>
-                  Actions
+                {/* 6. Actions Reset Filter Button */}
+                <th style={{ padding: '6px 12px 10px 12px', textAlign: 'center' }}>
+                  {hasActiveColumnFilters && (
+                    <button
+                      onClick={resetColumnFilters}
+                      style={{
+                        border: 'none',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        color: 'var(--danger)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                      title="Reset all column filters"
+                    >
+                      <RotateCcw size={11} />
+                      <span>Reset</span>
+                    </button>
+                  )}
                 </th>
               </tr>
             </thead>
