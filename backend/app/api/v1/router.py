@@ -8,6 +8,7 @@ from app.api.v1.endpoints.user import (
     dashboard as user_dashboard,
     goals as user_goals,
     notifications as user_notifications,
+    analytics as user_analytics,
 )
 from app.api.v1.endpoints.admin import overview as admin_overview, users as admin_users
 
@@ -23,6 +24,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
 # -------------------------------------------------------------
 user_router = APIRouter(prefix="/user")
 user_router.include_router(user_dashboard.router, prefix="/dashboard", tags=["User - Dashboard"])
+user_router.include_router(user_analytics.router, prefix="/analytics", tags=["User - Analytics"])
 user_router.include_router(user_settings.router, prefix="/settings", tags=["User - Settings"])
 user_router.include_router(user_income.router, prefix="/income", tags=["User - Income"])
 user_router.include_router(user_expense.router, prefix="/expenses", tags=["User - Expenses"])

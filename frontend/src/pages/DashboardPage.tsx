@@ -12,7 +12,8 @@ import {
   Bell, 
   LogOut, 
   Sparkles,
-  PlusCircle
+  PlusCircle,
+  BarChart3
 } from 'lucide-react';
 import api from '../api/client';
 import { IncomePage } from './IncomePage';
@@ -20,6 +21,7 @@ import { ExpensePage } from './ExpensePage';
 import { BudgetsView } from '../components/BudgetsView';
 import { GoalsView } from '../components/GoalsView';
 import { DashboardView } from '../components/DashboardView';
+import { AnalyticsView } from '../components/AnalyticsView';
 import { PeriodFilterDropdown } from '../components/PeriodFilterDropdown';
 import {
   fetchNotifications,
@@ -44,6 +46,7 @@ interface UserProfile {
 
 const VALID_TABS = [
   'dashboard',
+  'analytics',
   'income',
   'transactions',
   'budgets',
@@ -270,6 +273,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             >
               <LayoutDashboard size={18} />
               Dashboard
+            </button>
+
+            <button
+              onClick={() => setActiveTab('analytics')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-btn)',
+                border: 'none',
+                backgroundColor: activeTab === 'analytics' ? 'var(--light-accent)' : 'transparent',
+                color: activeTab === 'analytics' ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: activeTab === 'analytics' ? 600 : 500,
+                fontSize: '14px',
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              <BarChart3 size={18} />
+              Analytics
             </button>
 
             <button
@@ -629,7 +654,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         </header>
 
         {/* Body Content */}
-        {activeTab === 'income' ? (
+        {activeTab === 'analytics' ? (
+          <main style={{ width: '100%' }}>
+            <AnalyticsView
+              periodType={periodType}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              selectedQuarter={selectedQuarter}
+              selectedHalf={selectedHalf}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          </main>
+        ) : activeTab === 'income' ? (
           <IncomePage
             selectedMonth={selectedMonth}
             selectedYear={selectedYear}

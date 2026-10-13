@@ -437,36 +437,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Financial Health Score Widget */}
-        <div className="card-box" style={{
-          padding: '20px',
-          borderLeft: '4px solid #8B5CF6',
-          minHeight: '130px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
+        <div
+          onClick={() => onNavigateTab('analytics')}
+          className="card-box"
+          style={{
+            padding: '20px',
+            borderLeft: '4px solid var(--accent)',
+            minHeight: '130px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+          }}
+          title="Click to view detailed Financial Health & Analytics"
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Financial Health</span>
             <span className="badge-pill" style={{
               fontSize: '11px',
               padding: '2px 8px',
-              backgroundColor: (data?.financial_health_score || 0) >= 75 ? 'var(--light-accent)' : 'rgba(245, 158, 11, 0.15)',
-              color: (data?.financial_health_score || 0) >= 75 ? 'var(--accent)' : 'var(--warning)'
+              backgroundColor: (data?.financial_health_score || 0) >= 60 ? 'var(--light-accent)' : (data?.financial_health_score || 0) >= 40 ? 'rgba(245, 158, 11, 0.15)' : 'var(--light-danger)',
+              color: (data?.financial_health_score || 0) >= 60 ? 'var(--accent)' : (data?.financial_health_score || 0) >= 40 ? 'var(--warning)' : 'var(--danger)'
             }}>
               {data?.financial_health_label || 'Good'}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0' }}>
-            <span style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
-              {data?.financial_health_score || 78}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0' }}>
+              <span style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
+                {data?.financial_health_score ?? '--'}
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>/ 100</span>
+            </div>
+            <span style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>
+              Analytics <ChevronRight size={13} />
             </span>
-            <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>/ 100</span>
           </div>
           <div style={{ height: '7px', borderRadius: '4px', backgroundColor: 'var(--border)', overflow: 'hidden' }}>
             <div style={{
-              width: `${Math.min(100, Math.max(10, data?.financial_health_score || 78))}%`,
+              width: `${Math.min(100, Math.max(0, data?.financial_health_score || 0))}%`,
               height: '100%',
-              backgroundColor: (data?.financial_health_score || 0) >= 75 ? 'var(--accent)' : 'var(--warning)',
+              backgroundColor: (data?.financial_health_score || 0) >= 60 ? 'var(--accent)' : (data?.financial_health_score || 0) >= 40 ? 'var(--warning)' : 'var(--danger)',
               borderRadius: '4px',
               transition: 'width 0.4s ease'
             }}></div>
