@@ -64,7 +64,8 @@ export interface PeriodComparisonMetric {
   current_value: number;
   previous_value: number;
   change_amount: number;
-  change_pct: number;
+  change_pct?: number | null;
+  change_label: string;
   is_good: boolean;
   formatted_current: string;
   formatted_previous: string;

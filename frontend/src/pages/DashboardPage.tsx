@@ -5,7 +5,6 @@ import {
   Receipt, 
   Target, 
   PieChart, 
-  FileText, 
   BookOpen, 
   Settings, 
   HelpCircle, 
@@ -51,7 +50,6 @@ const VALID_TABS = [
   'transactions',
   'budgets',
   'goals',
-  'reports',
   'notifications',
   'tips',
   'settings',
@@ -113,7 +111,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   const [highlightedGoalId, setHighlightedGoalId] = useState<string | null>(null);
 
   const handleNavigateWithHighlight = (tab: string, targetId?: string | null) => {
-    const validTab = (tab && tab !== 'dashboard') ? tab : (targetId ? 'budgets' : 'budgets');
+    let target = tab;
+    if (target === 'reports') target = 'analytics';
+    const validTab = (target && target !== 'dashboard') ? target : (targetId ? 'budgets' : 'budgets');
     if (validTab === 'budgets') {
       setHighlightedBudgetId(targetId || null);
     } else if (validTab === 'goals') {
@@ -383,28 +383,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             >
               <Target size={18} />
               Goals
-            </button>
-
-            <button
-              onClick={() => setActiveTab('reports')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: 'var(--radius-btn)',
-                border: 'none',
-                backgroundColor: activeTab === 'reports' ? 'var(--light-accent)' : 'transparent',
-                color: activeTab === 'reports' ? 'var(--accent)' : 'var(--secondary-text)',
-                fontWeight: activeTab === 'reports' ? 600 : 500,
-                fontSize: '14px',
-                cursor: 'pointer',
-                textAlign: 'left'
-              }}
-            >
-              <FileText size={18} />
-              Reports
             </button>
 
             <button

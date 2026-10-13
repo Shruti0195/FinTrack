@@ -156,19 +156,22 @@ const FinancialHealthInfoPopover: React.FC<FinancialHealthInfoPopoverProps> = ({
             Calculated from your verified entries across 4 key factors:
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {healthScore.factors.map((f, i) => (
               <div
                 key={i}
                 style={{
-                  padding: '8px 10px',
-                  borderRadius: '6px',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
                   backgroundColor: 'var(--card-subtle)',
-                  border: '1px solid var(--border)'
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '12px' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '12px' }}>
                     {f.name}
                   </span>
                   <span
@@ -181,7 +184,25 @@ const FinancialHealthInfoPopover: React.FC<FinancialHealthInfoPopoverProps> = ({
                     {f.is_calculated ? `${f.earned_points} / ${f.max_points} pts` : 'Excluded'}
                   </span>
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--secondary-text)', marginTop: '2px' }}>
+
+                {/* Rule in Plain Words */}
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--secondary-text)', lineHeight: 1.4 }}>
+                  {f.rule_explanation}
+                </p>
+
+                {/* User's Own Figures for this period */}
+                <div
+                  style={{
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    color: f.is_calculated ? 'var(--primary)' : '#F59E0B',
+                    backgroundColor: 'var(--card)',
+                    padding: '4px 8px',
+                    borderRadius: '5px',
+                    border: '1px solid var(--border)',
+                    marginTop: '2px'
+                  }}
+                >
                   {f.is_calculated ? f.user_figure_text : f.not_calculated_reason}
                 </div>
               </div>
@@ -356,13 +377,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             style={{
               fontSize: '14.5px',
               color: 'var(--secondary-text)',
-              maxWidth: '500px',
+              maxWidth: '520px',
               lineHeight: 1.5,
               margin: 0
             }}
           >
-            Add a few more weeks of income and expenses to unlock your Financial Health Score, category allocations,
-            and period comparisons.
+            Add a few more weeks of entries to see your score. FinTrack requires at least 10 entries across 2 different weeks to calculate your Financial Health Score and analytics.
           </p>
           <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
             <button
@@ -938,12 +958,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       fontWeight: 700
                     }}
                   >
-                    {c.change_pct > 0 ? (
+                    {c.change_label === 'New' ? null : (c.change_pct ?? 0) > 0 ? (
                       <ArrowUpRight size={13} />
-                    ) : c.change_pct < 0 ? (
+                    ) : (c.change_pct ?? 0) < 0 ? (
                       <ArrowDownRight size={13} />
                     ) : null}
-                    <span>{c.change_pct >= 0 ? `+${c.change_pct.toFixed(1)}%` : `${c.change_pct.toFixed(1)}%`}</span>
+                    <span>{c.change_label}</span>
                   </div>
                 </div>
 
@@ -953,7 +973,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--secondary-text)', marginTop: '2px' }}>
                     Prior: {c.formatted_previous}
-                    {hasChange && (
+                    {hasChange && c.change_label !== 'New' && (
                       <span style={{ marginLeft: '6px', color: badgeColor, fontWeight: 600 }}>
                         ({c.change_amount >= 0 ? '+' : ''}{c.label.includes('Rate') ? `${c.change_amount.toFixed(1)}%` : formatINR(c.change_amount, true)})
                       </span>

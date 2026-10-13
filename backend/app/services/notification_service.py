@@ -288,7 +288,7 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                 type='monthly_report',
                 title=f"Monthly Financial Report Ready",
                 message=f"Your financial summary report for {m_name} {current_year} is ready to view.",
-                target_tab='reports',
+                target_tab='analytics',
                 is_read=False
             ))
             db.commit()

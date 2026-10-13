@@ -68,7 +68,8 @@ class PeriodComparisonMetric(BaseModel):
     current_value: float
     previous_value: float
     change_amount: float
-    change_pct: float
+    change_pct: Optional[float] = None
+    change_label: str = ""  # e.g. "New", "+12.5%", "-8.0%"
     is_good: bool  # True if change is positive financial health (e.g. income up, expense down, savings up)
     formatted_current: str
     formatted_previous: str

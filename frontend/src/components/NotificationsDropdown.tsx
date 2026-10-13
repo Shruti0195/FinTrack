@@ -214,7 +214,11 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
                   onClick={() => {
                     if (!item.is_read) onMarkRead(item.id);
                     const targetId = item.budget_id || item.goal_id || null;
-                    const tab = (item.target_tab && item.target_tab !== 'dashboard') ? item.target_tab : (item.budget_id ? 'budgets' : item.goal_id ? 'goals' : 'budgets');
+                    const tab = (item.type === 'monthly_report' || item.target_tab === 'reports')
+                      ? 'analytics'
+                      : (item.target_tab && item.target_tab !== 'dashboard')
+                      ? item.target_tab
+                      : (item.budget_id ? 'budgets' : item.goal_id ? 'goals' : 'budgets');
                     onNavigateTab(tab, targetId);
                     onClose();
                   }}

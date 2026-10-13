@@ -457,18 +457,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="badge-pill" style={{
               fontSize: '11px',
               padding: '2px 8px',
-              backgroundColor: (data?.financial_health_score || 0) >= 60 ? 'var(--light-accent)' : (data?.financial_health_score || 0) >= 40 ? 'rgba(245, 158, 11, 0.15)' : 'var(--light-danger)',
-              color: (data?.financial_health_score || 0) >= 60 ? 'var(--accent)' : (data?.financial_health_score || 0) >= 40 ? 'var(--warning)' : 'var(--danger)'
+              backgroundColor: data?.financial_health_score !== null && data?.financial_health_score !== undefined
+                ? (data.financial_health_score >= 80 ? 'var(--light-accent)' : data.financial_health_score >= 60 ? 'rgba(59, 130, 246, 0.15)' : data.financial_health_score >= 40 ? 'rgba(245, 158, 11, 0.15)' : 'var(--light-danger)')
+                : 'var(--card-subtle)',
+              color: data?.financial_health_score !== null && data?.financial_health_score !== undefined
+                ? (data.financial_health_score >= 80 ? 'var(--accent)' : data.financial_health_score >= 60 ? '#3B82F6' : data.financial_health_score >= 40 ? 'var(--warning)' : 'var(--danger)')
+                : 'var(--secondary-text)'
             }}>
-              {data?.financial_health_label || 'Good'}
+              {data?.financial_health_score !== null && data?.financial_health_score !== undefined
+                ? (data?.financial_health_label || 'Good')
+                : 'Add more entries'}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0' }}>
               <span style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
-                {data?.financial_health_score ?? '--'}
+                {data?.financial_health_score !== null && data?.financial_health_score !== undefined
+                  ? data.financial_health_score
+                  : '--'}
               </span>
-              <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>/ 100</span>
+              {data?.financial_health_score !== null && data?.financial_health_score !== undefined && (
+                <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>/ 100</span>
+              )}
             </div>
             <span style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>
               Analytics <ChevronRight size={13} />
@@ -476,9 +486,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div style={{ height: '7px', borderRadius: '4px', backgroundColor: 'var(--border)', overflow: 'hidden' }}>
             <div style={{
-              width: `${Math.min(100, Math.max(0, data?.financial_health_score || 0))}%`,
+              width: data?.financial_health_score !== null && data?.financial_health_score !== undefined
+                ? `${Math.min(100, Math.max(0, data.financial_health_score))}%`
+                : '0%',
               height: '100%',
-              backgroundColor: (data?.financial_health_score || 0) >= 60 ? 'var(--accent)' : (data?.financial_health_score || 0) >= 40 ? 'var(--warning)' : 'var(--danger)',
+              backgroundColor: (data?.financial_health_score || 0) >= 80 ? 'var(--accent)' : (data?.financial_health_score || 0) >= 60 ? '#3B82F6' : (data?.financial_health_score || 0) >= 40 ? 'var(--warning)' : 'var(--danger)',
               borderRadius: '4px',
               transition: 'width 0.4s ease'
             }}></div>

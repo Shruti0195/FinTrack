@@ -63,9 +63,9 @@ export const PeriodFilterDropdown: React.FC<PeriodFilterDropdownProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  let periodLabel = 'Apr 2026';
+  let periodLabel = `${MONTHS_LIST.find((m) => m.val === selectedMonth)?.label || 'Month'} ${selectedYear}`;
   if (periodType === 'monthly') {
-    periodLabel = `${MONTHS_LIST.find((m) => m.val === selectedMonth)?.label || 'Apr'} ${selectedYear}`;
+    periodLabel = `${MONTHS_LIST.find((m) => m.val === selectedMonth)?.label || 'Month'} ${selectedYear}`;
   } else if (periodType === 'quarterly') {
     periodLabel = `Q${selectedQuarter} ${selectedYear} (${selectedQuarter === 1 ? 'Jan - Mar' : selectedQuarter === 2 ? 'Apr - Jun' : selectedQuarter === 3 ? 'Jul - Sep' : 'Oct - Dec'})`;
   } else if (periodType === 'half_year') {
@@ -186,7 +186,7 @@ export const PeriodFilterDropdown: React.FC<PeriodFilterDropdownProps> = ({
           }}>
             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--secondary-text)' }}>Year</span>
             <div style={{ display: 'flex', gap: '4px' }}>
-              {[2024, 2025, 2026, 2027].map((yr) => (
+              {[new Date().getFullYear() - 2, new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map((yr) => (
                 <button
                   key={yr}
                   onClick={() => onYearChange?.(yr)}
