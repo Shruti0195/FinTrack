@@ -7,6 +7,7 @@ from app.api.v1.endpoints.user import (
     budgets as user_budgets,
     dashboard as user_dashboard,
     goals as user_goals,
+    notifications as user_notifications,
 )
 from app.api.v1.endpoints.admin import overview as admin_overview, users as admin_users
 
@@ -28,6 +29,7 @@ user_router.include_router(user_expense.router, prefix="/expenses", tags=["User 
 user_router.include_router(user_expense.router, prefix="/transactions", tags=["User - Transactions"])
 user_router.include_router(user_budgets.router, prefix="/budgets", tags=["User - Budgets"])
 user_router.include_router(user_goals.router, prefix="/goals", tags=["User - Goals"])
+user_router.include_router(user_notifications.router, prefix="/notifications", tags=["User - Notifications"])
 # user_router.include_router(analytics.router, prefix="/analytics", tags=["User - Analytics"])
 
 api_router.include_router(user_router)

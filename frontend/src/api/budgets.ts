@@ -41,6 +41,8 @@ export interface BudgetCategory {
   id: string;
   name: string;
   type: string;
+  is_default?: boolean;
+  user_id?: string | null;
 }
 
 export interface BudgetCreateInput {

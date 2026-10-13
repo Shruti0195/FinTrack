@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
-from sqlalchemy import func, extract, desc, asc
+from sqlalchemy import func, extract, desc, asc, or_
 from sqlalchemy.orm import Session
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -20,6 +20,7 @@ from app.models.transaction import Transaction
 from app.models.category import Category
 from app.schemas.expense import (
     ExpenseCategoryOut,
+    CustomCategoryCreate,
     ExpenseCreate,
     ExpenseUpdate,
     ExpenseOut,
@@ -37,15 +38,62 @@ def get_expense_categories(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Get all active expense categories (e.g. Food, Rent, Transport, Shopping, Bills, etc.).
+    Get all active expense categories (both default and user-specific custom ones).
     """
     categories = (
         db.query(Category)
-        .filter(Category.type == "expense", Category.is_active == True)
+        .filter(
+            Category.type == "expense",
+            Category.is_active == True,
+            or_(Category.is_default == True, Category.user_id == current_user.id),
+        )
         .order_by(Category.name.asc())
         .all()
     )
     return categories
+
+
+@router.post("/categories", response_model=ExpenseCategoryOut, status_code=status.HTTP_201_CREATED)
+def create_custom_expense_category(
+    cat_in: CustomCategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Create a custom expense category scoped exclusively to the authenticated user.
+    """
+    cleaned_name = cat_in.name.strip()
+    if not cleaned_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category name cannot be empty.",
+        )
+
+    existing = (
+        db.query(Category)
+        .filter(
+            Category.type == "expense",
+            Category.is_active == True,
+            func.lower(Category.name) == cleaned_name.lower(),
+            or_(Category.user_id.is_(None), Category.user_id == current_user.id),
+        )
+        .first()
+    )
+    if existing:
+        return existing
+
+    new_cat = Category(
+        name=cleaned_name,
+        type="expense",
+        is_default=False,
+        is_active=True,
+        user_id=current_user.id,
+    )
+    db.add(new_cat)
+    db.commit()
+    db.refresh(new_cat)
+
+    return new_cat
 
 
 @router.get("/stats", response_model=ExpenseStatsResponse)
@@ -691,6 +739,7 @@ def create_expense(
             Category.id == expense_in.category_id,
             Category.type == "expense",
             Category.is_active == True,
+            or_(Category.user_id.is_(None), Category.user_id == current_user.id),
         )
         .first()
     )
@@ -713,6 +762,12 @@ def create_expense(
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
 
     return ExpenseOut(
         id=transaction.id,
@@ -801,6 +856,7 @@ def update_expense(
                 Category.id == expense_in.category_id,
                 Category.type == "expense",
                 Category.is_active == True,
+                or_(Category.user_id.is_(None), Category.user_id == current_user.id),
             )
             .first()
         )
@@ -822,6 +878,12 @@ def update_expense(
 
     db.commit()
     db.refresh(transaction)
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
 
     cat = db.query(Category).filter(Category.id == transaction.category_id).first()
     cat_name = cat.name if cat else "Unknown"
@@ -865,5 +927,11 @@ def delete_expense(
 
     db.delete(transaction)
     db.commit()
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
 
     return MessageResponse(message="Expense transaction deleted successfully")

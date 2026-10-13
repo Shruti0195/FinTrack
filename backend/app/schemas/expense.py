@@ -7,9 +7,14 @@ class ExpenseCategoryOut(BaseModel):
     id: uuid.UUID
     name: str
     type: str
+    is_default: bool = True
+    user_id: Optional[uuid.UUID] = None
 
     class Config:
         from_attributes = True
+
+class CustomCategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60, description="Custom category name")
 
 class ExpenseCreate(BaseModel):
     amount: float = Field(..., gt=0, description="Expense amount must be greater than zero")

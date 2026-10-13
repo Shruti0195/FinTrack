@@ -751,6 +751,12 @@ def create_income(
     db.commit()
     db.refresh(tx)
 
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     return IncomeOut(
         id=tx.id,
         amount=float(tx.amount),
@@ -850,6 +856,12 @@ def update_income(
     db.commit()
     db.refresh(tx)
 
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     category = db.query(Category).filter(Category.id == tx.category_id).first()
     cat_name = category.name if category else "Income"
 
@@ -887,5 +899,11 @@ def delete_income(
 
     db.delete(tx)
     db.commit()
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
 
     return MessageResponse(message="Income entry deleted successfully.", success=True)

@@ -21,6 +21,9 @@ class UserOut(UserBase):
     is_active: bool
     is_verified: bool
     email_alerts_enabled: bool
+    email_budget_alerts: bool = True
+    goal_milestone_notifs: bool = True
+    monthly_report_notifs: bool = True
     created_at: datetime
 
     class Config:
@@ -29,6 +32,9 @@ class UserOut(UserBase):
 class UserSettingsUpdate(BaseModel):
     name: Optional[str] = None
     email_alerts_enabled: Optional[bool] = None
+    email_budget_alerts: Optional[bool] = None
+    goal_milestone_notifs: Optional[bool] = None
+    monthly_report_notifs: Optional[bool] = None
 
 class MessageResponse(BaseModel):
     message: str

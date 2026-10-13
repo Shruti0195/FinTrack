@@ -89,11 +89,11 @@ export interface IncomePageProps {
 }
 
 export const IncomePage: React.FC<IncomePageProps> = ({
-  selectedMonth = 4,
-  selectedYear = 2026,
+  selectedMonth = new Date().getMonth() + 1,
+  selectedYear = new Date().getFullYear(),
   periodType = 'monthly',
-  selectedQuarter = 2,
-  selectedHalf = 1,
+  selectedQuarter = Math.ceil((new Date().getMonth() + 1) / 3),
+  selectedHalf = (new Date().getMonth() + 1) <= 6 ? 1 : 2,
   periodLabel: propPeriodLabel
 }) => {
   // Compute start_date and end_date based on navbar period view
@@ -1609,7 +1609,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                     }}
                   >
                     <Plus size={13} />
-                    <span>{isAddingCustomCategory ? 'Cancel' : '+ Add Custom Category'}</span>
+                    <span>{isAddingCustomCategory ? 'Cancel' : ' Add Custom Category'}</span>
                   </button>
                 </div>
 

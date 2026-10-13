@@ -3,7 +3,7 @@ from datetime import date
 from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.core.database import get_db
 from app.models.user import User
@@ -122,11 +122,15 @@ def get_budget_eligible_categories(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Get active expense categories available for setting a budget.
+    Get active expense categories available for setting a budget (both default and user custom).
     """
     categories = (
         db.query(Category)
-        .filter(Category.type == "expense", Category.is_active.is_(True))
+        .filter(
+            Category.type == "expense",
+            Category.is_active.is_(True),
+            or_(Category.is_default.is_(True), Category.user_id == current_user.id),
+        )
         .order_by(Category.name.asc())
         .all()
     )
@@ -414,7 +418,10 @@ def create_budget(
     Create a new budget for an expense category. Supports single month or multi-month periods.
     """
     # 1. Verify category exists and is an expense category
-    category = db.query(Category).filter(Category.id == budget_in.category_id).first()
+    category = db.query(Category).filter(
+        Category.id == budget_in.category_id,
+        or_(Category.user_id.is_(None), Category.user_id == current_user.id)
+    ).first()
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -515,6 +522,12 @@ def create_budget(
         or 0.0
     )
 
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     return _format_budget_response(new_budget, category.name, float(spent))
 
 
@@ -598,6 +611,12 @@ def update_budget(
         or 0.0
     )
 
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     return _format_budget_response(b, cat_name, float(spent))
 
 
@@ -623,4 +642,11 @@ def delete_budget(
 
     db.delete(budget)
     db.commit()
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     return {"message": "Budget deleted successfully", "id": str(budget_id)}

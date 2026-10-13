@@ -183,6 +183,12 @@ def create_goal(
     db.refresh(new_goal)
 
     details = calculate_goal_details(new_goal, [])
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     return GoalOut(**details)
 
 
@@ -240,6 +246,12 @@ def update_goal(
         db.add(goal)
         db.commit()
 
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     details = calculate_goal_details(goal, contributions)
     return GoalOut(**details)
 
@@ -257,6 +269,13 @@ def delete_goal(
 
     db.delete(goal)
     db.commit()
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     return {"message": "Goal deleted successfully", "id": str(goal_id)}
 
 
@@ -308,6 +327,12 @@ def add_contribution(
         goal.status = 'completed'
         db.add(goal)
         db.commit()
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
 
     details = calculate_goal_details(goal, contributions)
     return GoalOut(**details)
@@ -364,6 +389,12 @@ def update_contribution(
     db.add(goal)
     db.commit()
 
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
     details = calculate_goal_details(goal, contributions)
     return GoalOut(**details)
 
@@ -397,6 +428,12 @@ def delete_contribution(
         goal.status = 'active'
         db.add(goal)
         db.commit()
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
 
     details = calculate_goal_details(goal, contributions)
     return GoalOut(**details)

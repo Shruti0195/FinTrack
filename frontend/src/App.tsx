@@ -51,6 +51,10 @@ function AppContent() {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('fintrack_active_tab');
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
     setUserLoggedIn(false);
   };
 

@@ -73,13 +73,44 @@ const renderGoalIcon = (iconId: string, size = 20, color = '#10B981') => {
   return <Component size={size} color={color} />;
 };
 
-export const GoalsView: React.FC = () => {
+export interface GoalsViewProps {
+  highlightedGoalId?: string | null;
+  onClearHighlight?: () => void;
+  onRefreshNotifications?: () => void;
+}
+
+export const GoalsView: React.FC<GoalsViewProps> = ({
+  highlightedGoalId: propHighlightedGoalId,
+  onClearHighlight,
+  onRefreshNotifications
+}) => {
   // State
   const [goals, setGoals] = useState<Goal[]>([]);
   const [summary, setSummary] = useState<GoalSummary | null>(null);
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'completed'>('all');
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // Card highlight state from notification navigation
+  const [activeHighlightId, setActiveHighlightId] = useState<string | null>(propHighlightedGoalId || null);
+
+  useEffect(() => {
+    if (propHighlightedGoalId) {
+      setActiveHighlightId(propHighlightedGoalId);
+    }
+  }, [propHighlightedGoalId]);
+
+  useEffect(() => {
+    if (!activeHighlightId) return;
+    const timer = setTimeout(() => {
+      const handleGlobalClick = () => {
+        setActiveHighlightId(null);
+        if (onClearHighlight) onClearHighlight();
+      };
+      window.addEventListener('click', handleGlobalClick, { once: true });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [activeHighlightId, onClearHighlight]);
 
   // Toast notification
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'info' | 'celebrate' } | null>(null);
@@ -223,6 +254,7 @@ export const GoalsView: React.FC = () => {
       setIsCreateModalOpen(false);
       showToast(`Great start! Your "${created.title}" savings fund begins today. 🚀`, 'celebrate');
       await loadGoalsData();
+      if (onRefreshNotifications) onRefreshNotifications();
     } catch (err: any) {
       setFormError(err.response?.data?.detail || 'Failed to create goal.');
     } finally {
@@ -260,6 +292,7 @@ export const GoalsView: React.FC = () => {
       setEditingGoal(null);
       showToast(`Updated "${updated.title}" goal target & progress preferences.`, 'info');
       await loadGoalsData();
+      if (onRefreshNotifications) onRefreshNotifications();
     } catch (err: any) {
       setFormError(err.response?.data?.detail || 'Failed to update goal.');
     } finally {
@@ -278,6 +311,7 @@ export const GoalsView: React.FC = () => {
       }
       showToast('Goal and history deleted successfully.', 'info');
       await loadGoalsData();
+      if (onRefreshNotifications) onRefreshNotifications();
     } catch (err: any) {
       showToast(err.response?.data?.detail || 'Failed to delete goal.', 'info');
     }
@@ -331,6 +365,7 @@ export const GoalsView: React.FC = () => {
       }
 
       await loadGoalsData();
+      if (onRefreshNotifications) onRefreshNotifications();
     } catch (err: any) {
       setAddMoneyError(err.response?.data?.detail || 'Failed to add contribution.');
     } finally {
@@ -643,6 +678,7 @@ export const GoalsView: React.FC = () => {
             const isCompleted = goal.status === 'completed' || goal.percentage >= 100;
             const isOverdue = goal.deadline && new Date(goal.deadline) < new Date() && !isCompleted;
             const goalColor = goal.color || '#10B981';
+            const isHighlighted = Boolean(activeHighlightId && goal.id === activeHighlightId);
 
             return (
               <div
@@ -654,9 +690,15 @@ export const GoalsView: React.FC = () => {
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   borderRadius: '12px',
-                  border: isCompleted ? '2px solid var(--accent)' : '1px solid var(--border)',
+                  border: isHighlighted
+                    ? '2px solid var(--accent)'
+                    : isCompleted
+                      ? '2px solid var(--accent)'
+                      : '1px solid var(--border)',
+                  boxShadow: isHighlighted ? '0 0 0 3px var(--accent), var(--shadow-lg)' : undefined,
+                  backgroundColor: isHighlighted ? 'var(--light-accent)' : undefined,
                   position: 'relative',
-                  transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                  transition: 'all 0.25s ease'
                 }}
               >
                 {/* Top Row: Icon, Title, Options */}

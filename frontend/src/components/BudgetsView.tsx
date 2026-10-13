@@ -27,6 +27,7 @@ import {
   updateBudget, 
   deleteBudget 
 } from '../api/budgets';
+import api from '../api/client';
 import { CustomSelect } from './CustomSelect';
 import type { PeriodType } from './PeriodFilterDropdown';
 import type { 
@@ -160,6 +161,8 @@ export interface BudgetsViewProps {
   periodType?: PeriodType;
   selectedQuarter?: number;
   selectedHalf?: number;
+  highlightedBudgetId?: string | null;
+  onClearHighlight?: () => void;
 }
 
 export const BudgetsView: React.FC<BudgetsViewProps> = ({
@@ -167,15 +170,23 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   selectedYear: propYear,
   periodType: propPeriodType,
   selectedQuarter: propQuarter,
-  selectedHalf: propHalf
+  selectedHalf: propHalf,
+  highlightedBudgetId: propHighlightedBudgetId,
+  onClearHighlight
 }) => {
+
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const currentQuarter = Math.ceil(currentMonth / 3);
+  const currentHalf = currentMonth <= 6 ? 1 : 2;
 
   // Period View state
   const [activePeriod, setActivePeriod] = useState<BudgetPeriodType>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<number>(propMonth || 4);
-  const [selectedQuarter, setSelectedQuarter] = useState<number>(propQuarter || 2);
-  const [selectedHalf, setSelectedHalf] = useState<number>(propHalf || 1);
-  const [selectedYear, setSelectedYear] = useState<number>(propYear || 2026);
+  const [selectedMonth, setSelectedMonth] = useState<number>(propMonth || currentMonth);
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(propQuarter || currentQuarter);
+  const [selectedHalf, setSelectedHalf] = useState<number>(propHalf || currentHalf);
+  const [selectedYear, setSelectedYear] = useState<number>(propYear || currentYear);
 
   useEffect(() => {
     if (propMonth !== undefined) setSelectedMonth(propMonth);
@@ -195,6 +206,27 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Card highlight state from notification navigation
+  const [activeHighlightId, setActiveHighlightId] = useState<string | null>(propHighlightedBudgetId || null);
+
+  useEffect(() => {
+    if (propHighlightedBudgetId) {
+      setActiveHighlightId(propHighlightedBudgetId);
+    }
+  }, [propHighlightedBudgetId]);
+
+  useEffect(() => {
+    if (!activeHighlightId) return;
+    const timer = setTimeout(() => {
+      const handleGlobalClick = () => {
+        setActiveHighlightId(null);
+        if (onClearHighlight) onClearHighlight();
+      };
+      window.addEventListener('click', handleGlobalClick, { once: true });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [activeHighlightId, onClearHighlight]);
+
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
@@ -203,10 +235,44 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   // Form fields
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formLimitAmount, setFormLimitAmount] = useState('');
-  const [formMonth, setFormMonth] = useState<number>(9);
-  const [formYear, setFormYear] = useState<number>(2026);
+  const [formMonth, setFormMonth] = useState<number>(currentMonth);
+  const [formYear, setFormYear] = useState<number>(currentYear);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Custom Category creation state
+  const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customCategoryError, setCustomCategoryError] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  const handleCreateCustomCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customCategoryName.trim()) {
+      setCustomCategoryError('Category name is required.');
+      return;
+    }
+    setIsCreatingCategory(true);
+    setCustomCategoryError('');
+    try {
+      const res = await api.post('/user/expenses/categories', { name: customCategoryName.trim() });
+      const newCat: BudgetCategory = res.data;
+
+      setCategories((prev) => {
+        if (prev.some((c) => c.id === newCat.id)) return prev;
+        return [...prev, newCat];
+      });
+
+      setFormCategoryId(newCat.id);
+      setCustomCategoryName('');
+      setIsAddingCustomCategory(false);
+      setSuccessMsg(`Custom category "${newCat.name}" added!`);
+    } catch (err: any) {
+      setCustomCategoryError(err.response?.data?.detail || 'Failed to create custom category.');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -676,6 +742,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                   ? `${b.percentage_used}% (Near limit)`
                   : `${b.percentage_used}% spent`;
 
+              const isHighlighted = Boolean(
+                activeHighlightId && (b.id === activeHighlightId || b.category_id === activeHighlightId)
+              );
+
               return (
                 <div 
                   key={b.id || b.category_id} 
@@ -686,7 +756,9 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                     flexDirection: 'column', 
                     justifyContent: 'space-between',
                     borderLeft: `4px solid ${barColor}`,
-                    transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                    boxShadow: isHighlighted ? '0 0 0 3px var(--accent), var(--shadow-lg)' : undefined,
+                    backgroundColor: isHighlighted ? 'var(--light-accent)' : undefined,
+                    transition: 'all 0.25s ease'
                   }}
                 >
                   <div>
@@ -869,17 +941,80 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
               
               {/* Category Dropdown */}
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                  Category
-                </label>
-                <CustomSelect
-                  value={formCategoryId}
-                  onChange={(val) => setFormCategoryId(String(val))}
-                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                  placeholder="Select category..."
-                  style={{ width: '100%' }}
-                  buttonStyle={{ height: '42px', fontSize: '14px' }}
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--main-text)' }}>
+                    Category
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomCategory(!isAddingCustomCategory);
+                      setCustomCategoryError('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--accent)',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Plus size={13} />
+                    <span>{isAddingCustomCategory ? 'Cancel' : 'Add Custom Category'}</span>
+                  </button>
+                </div>
+
+                {isAddingCustomCategory ? (
+                  <div style={{
+                    backgroundColor: 'var(--card-subtle)',
+                    border: '1px solid var(--accent)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '8px'
+                  }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                      Create Custom Category (Private to your account)
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="text"
+                        placeholder="e.g. Subscriptions, Pet Care"
+                        value={customCategoryName}
+                        onChange={(e) => setCustomCategoryName(e.target.value)}
+                        className="input-field"
+                        style={{ height: '38px', fontSize: '13.5px', flex: 1 }}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateCustomCategory}
+                        disabled={isCreatingCategory}
+                        className="btn-primary"
+                        style={{ height: '38px', padding: '0 16px', fontSize: '13px' }}
+                      >
+                        {isCreatingCategory ? 'Saving...' : 'Add'}
+                      </button>
+                    </div>
+                    {customCategoryError && (
+                      <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '6px', fontWeight: 500 }}>
+                        {customCategoryError}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <CustomSelect
+                    value={formCategoryId}
+                    onChange={(val) => setFormCategoryId(String(val))}
+                    options={categories.map((c) => ({ value: c.id, label: `${c.name}${c.user_id ? ' (Custom)' : ''}` }))}
+                    placeholder="Select category..."
+                    style={{ width: '100%' }}
+                    buttonStyle={{ height: '42px', fontSize: '14px' }}
+                  />
+                )}
               </div>
 
               {/* Month & Year Selection (Full Freedom) */}

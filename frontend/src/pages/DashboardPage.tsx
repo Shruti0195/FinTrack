@@ -9,15 +9,11 @@ import {
   BookOpen, 
   Settings, 
   HelpCircle, 
-  Search, 
   Bell, 
   LogOut, 
-  Sun, 
-  Moon,
   Sparkles,
   PlusCircle
 } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
 import { IncomePage } from './IncomePage';
 import { ExpensePage } from './ExpensePage';
@@ -25,6 +21,16 @@ import { BudgetsView } from '../components/BudgetsView';
 import { GoalsView } from '../components/GoalsView';
 import { DashboardView } from '../components/DashboardView';
 import { PeriodFilterDropdown } from '../components/PeriodFilterDropdown';
+import {
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
+  type NotificationItem
+} from '../api/notifications';
+import { NotificationsDropdown } from '../components/NotificationsDropdown';
+import { NotificationsPage } from './NotificationsPage';
+import { SettingsView } from '../components/SettingsView';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -36,18 +42,141 @@ interface UserProfile {
   role: string;
 }
 
+const VALID_TABS = [
+  'dashboard',
+  'income',
+  'transactions',
+  'budgets',
+  'goals',
+  'reports',
+  'notifications',
+  'tips',
+  'settings',
+  'help'
+];
+
+const getInitialTab = (): string => {
+  const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+  if (VALID_TABS.includes(hash)) {
+    return hash;
+  }
+  const saved = localStorage.getItem('fintrack_active_tab')?.toLowerCase();
+  if (saved && VALID_TABS.includes(saved)) {
+    return saved;
+  }
+  return 'dashboard';
+};
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
-  const { theme, toggleTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
+
+  const setActiveTab = React.useCallback((tab: string) => {
+    const targetTab = VALID_TABS.includes(tab) ? tab : 'dashboard';
+    setActiveTabState(targetTab);
+    localStorage.setItem('fintrack_active_tab', targetTab);
+    if (window.location.hash.replace(/^#\/?/, '') !== targetTab) {
+      window.history.replaceState(null, '', `#${targetTab}`);
+    }
+  }, []);
+
+  // Sync when browser Back / Forward buttons are clicked or hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      if (VALID_TABS.includes(hash)) {
+        setActiveTabState(hash);
+        localStorage.setItem('fintrack_active_tab', hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Ensure initial hash is in the URL on mount
+  useEffect(() => {
+    if (!window.location.hash) {
+      window.history.replaceState(null, '', `#${activeTab}`);
+    }
+  }, [activeTab]);
+
   const [user, setUser] = useState<UserProfile | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  // Period filter states: Monthly, Quarterly, Half Year, Year (defaults to Apr 2026 as per user specification)
+  // Notifications State & Engine Polling
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
+  const [highlightedBudgetId, setHighlightedBudgetId] = useState<string | null>(null);
+  const [highlightedGoalId, setHighlightedGoalId] = useState<string | null>(null);
+
+  const handleNavigateWithHighlight = (tab: string, targetId?: string | null) => {
+    const validTab = (tab && tab !== 'dashboard') ? tab : (targetId ? 'budgets' : 'budgets');
+    if (validTab === 'budgets') {
+      setHighlightedBudgetId(targetId || null);
+    } else if (validTab === 'goals') {
+      setHighlightedGoalId(targetId || null);
+    }
+    setActiveTab(validTab);
+  };
+
+  const loadNotifications = React.useCallback(() => {
+    fetchNotifications()
+      .then((data) => {
+        setNotifications(data.items || []);
+        setUnreadNotifCount(data.unread_count || 0);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 15000);
+    return () => clearInterval(interval);
+  }, [loadNotifications]);
+
+  const handleMarkNotifRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+      setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+    } catch {}
+  };
+
+  const handleMarkAllNotifsRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadNotifCount(0);
+    } catch {}
+  };
+
+  const handleDeleteNotif = async (id: string) => {
+    try {
+      await deleteNotification(id);
+      setNotifications((prev) => {
+        const target = prev.find((n) => n.id === id);
+        if (target && !target.is_read) {
+          setUnreadNotifCount((cnt) => Math.max(0, cnt - 1));
+        }
+        return prev.filter((n) => n.id !== id);
+      });
+    } catch {}
+  };
+
+  // Period filter states: Monthly, Quarterly, Half Year, Year (defaults dynamically to current calendar period)
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentQuarter = Math.ceil(currentMonth / 3);
+  const currentHalf = currentMonth <= 6 ? 1 : 2;
+
   const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'half_year' | 'yearly'>('monthly');
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
-  const [selectedMonth, setSelectedMonth] = useState<number>(4); // April 2026
-  const [selectedQuarter, setSelectedQuarter] = useState<number>(2); // Q2 2026
-  const [selectedHalf, setSelectedHalf] = useState<number>(1); // H1 2026
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(currentQuarter);
+  const [selectedHalf, setSelectedHalf] = useState<number>(currentHalf);
 
   const monthsShort = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -74,6 +203,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
 
   const userName = user?.name || 'User';
   const userInitials = userName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+
+  const handleProfileUpdate = (updated: { name: string; email?: string }) => {
+    setUser((prev) => (prev ? { ...prev, ...updated } : { name: updated.name, email: updated.email || '', role: 'user' }));
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg)' }}>
@@ -250,6 +383,42 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             </button>
 
             <button
+              onClick={() => setActiveTab('notifications')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-btn)',
+                border: 'none',
+                backgroundColor: activeTab === 'notifications' ? 'var(--light-accent)' : 'transparent',
+                color: activeTab === 'notifications' ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: activeTab === 'notifications' ? 600 : 500,
+                fontSize: '14px',
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Bell size={18} />
+                <span>Notifications</span>
+              </div>
+              {unreadNotifCount > 0 && (
+                <span style={{
+                  backgroundColor: 'var(--accent)',
+                  color: '#FFFFFF',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: '999px'
+                }}>
+                  {unreadNotifCount}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => setActiveTab('tips')}
               style={{
                 display: 'flex',
@@ -347,24 +516,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           padding: '0 28px',
           position: 'sticky',
           top: 0,
           zIndex: 40,
           transition: 'background-color 0.2s ease, border-color 0.2s ease'
         }}>
-          {/* Search Bar */}
-          <div style={{ position: 'relative', width: '320px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
-            <input 
-              type="text"
-              placeholder="Search transactions, categories..."
-              className="input-field"
-              style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
-            />
-          </div>
-
           {/* Right Header Tools */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             {/* Header Period Filter Dropdown: Monthly, Quarterly, Half Year, Year (defaults to Apr 2026) */}
@@ -381,32 +539,53 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               onHalfChange={(h) => setSelectedHalf(h)}
             />
 
-            {/* Notification Bell */}
-            <button 
-              className="theme-toggle-btn"
-              title="Notifications"
-              style={{ position: 'relative' }}
-            >
-              <Bell size={17} />
-              <span style={{
-                position: 'absolute',
-                top: '6px',
-                right: '6px',
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--danger)'
-              }}></span>
-            </button>
+            {/* Notification Bell Dropdown */}
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <button 
+                onClick={() => setIsNotifDropdownOpen(!isNotifDropdownOpen)}
+                className="theme-toggle-btn"
+                title="Notifications"
+                aria-label="Notifications"
+                style={{ position: 'relative' }}
+              >
+                <Bell size={18} />
+              </button>
 
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="theme-toggle-btn"
-              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
+              {unreadNotifCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  minWidth: '18px',
+                  height: '18px',
+                  borderRadius: '999px',
+                  backgroundColor: 'var(--danger)',
+                  color: '#FFFFFF',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 4px',
+                  border: '2px solid var(--card)',
+                  pointerEvents: 'none',
+                  zIndex: 10
+                }}>
+                  {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                </span>
+              )}
+
+              <NotificationsDropdown
+                isOpen={isNotifDropdownOpen}
+                onClose={() => setIsNotifDropdownOpen(false)}
+                notifications={notifications}
+                unreadCount={unreadNotifCount}
+                onMarkRead={handleMarkNotifRead}
+                onMarkAllRead={handleMarkAllNotifsRead}
+                onNavigateTab={handleNavigateWithHighlight}
+                onViewAll={() => setActiveTab('notifications')}
+              />
+            </div>
 
             {/* User Avatar & Logout */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px' }}>
@@ -476,11 +655,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               periodType={periodType}
               selectedQuarter={selectedQuarter}
               selectedHalf={selectedHalf}
+              highlightedBudgetId={highlightedBudgetId}
+              onClearHighlight={() => setHighlightedBudgetId(null)}
             />
           </main>
         ) : activeTab === 'goals' ? (
           <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
-            <GoalsView />
+            <GoalsView
+              highlightedGoalId={highlightedGoalId}
+              onClearHighlight={() => setHighlightedGoalId(null)}
+              onRefreshNotifications={loadNotifications}
+            />
+          </main>
+        ) : activeTab === 'notifications' ? (
+          <main style={{ width: '100%' }}>
+            <NotificationsPage
+              notifications={notifications}
+              onMarkRead={handleMarkNotifRead}
+              onMarkAllRead={handleMarkAllNotifsRead}
+              onDelete={handleDeleteNotif}
+              onNavigateTab={handleNavigateWithHighlight}
+            />
+          </main>
+        ) : activeTab === 'settings' ? (
+          <main style={{ width: '100%' }}>
+            <SettingsView initialName={userName} onProfileUpdate={handleProfileUpdate} />
           </main>
         ) : (
           <DashboardView
@@ -549,6 +748,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               <button
                 onClick={() => {
                   setShowLogoutModal(false);
+                  localStorage.removeItem('fintrack_active_tab');
+                  if (window.location.hash) {
+                    window.history.replaceState(null, '', window.location.pathname);
+                  }
                   onLogout();
                 }}
                 style={{
