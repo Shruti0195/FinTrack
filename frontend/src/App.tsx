@@ -30,6 +30,16 @@ function AppContent() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUserLoggedIn(false);
+      setAuthMode('login');
+      setAuthModalOpen(true);
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, []);
+
   const handleOpenAuth = (mode: 'login' | 'register') => {
     setAuthMode(mode);
     setAuthModalOpen(true);
@@ -41,6 +51,10 @@ function AppContent() {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('fintrack_active_tab');
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
     setUserLoggedIn(false);
   };
 

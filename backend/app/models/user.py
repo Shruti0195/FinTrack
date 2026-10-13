@@ -18,6 +18,9 @@ class User(Base):
     is_verified = Column(Boolean, nullable=False, default=False)
     email_verified_at = Column(DateTime(timezone=True), nullable=True)
     email_alerts_enabled = Column(Boolean, nullable=False, default=True)
+    email_budget_alerts = Column(Boolean, nullable=False, default=True)
+    goal_milestone_notifs = Column(Boolean, nullable=False, default=True)
+    monthly_report_notifs = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

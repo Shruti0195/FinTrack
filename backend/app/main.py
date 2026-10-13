@@ -12,6 +12,35 @@ import app.models.goal
 import app.models.analytics
 import app.models.notification
 import app.models.admin
+from sqlalchemy import text
+from app.core.database import engine
+
+def ensure_columns():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS email_budget_alerts BOOLEAN NOT NULL DEFAULT TRUE,
+                ADD COLUMN IF NOT EXISTS goal_milestone_notifs BOOLEAN NOT NULL DEFAULT TRUE,
+                ADD COLUMN IF NOT EXISTS monthly_report_notifs BOOLEAN NOT NULL DEFAULT TRUE;
+            """))
+            conn.execute(text("""
+                ALTER TABLE notifications 
+                ADD COLUMN IF NOT EXISTS title VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS target_tab VARCHAR(50) DEFAULT 'dashboard';
+            """))
+            try:
+                conn.execute(text("""
+                    ALTER TABLE notifications 
+                    ALTER COLUMN type TYPE VARCHAR(50) USING type::VARCHAR(50);
+                """))
+            except Exception:
+                pass
+            conn.commit()
+    except Exception as e:
+        print(f"[DB INIT NOTE] Schema auto-ensure: {e}")
+
+ensure_columns()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -26,6 +55,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

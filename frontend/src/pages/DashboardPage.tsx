@@ -5,21 +5,33 @@ import {
   Receipt, 
   Target, 
   PieChart, 
-  FileText, 
   BookOpen, 
   Settings, 
   HelpCircle, 
-  Search, 
   Bell, 
   LogOut, 
-  Sun, 
-  Moon,
-  ArrowUpRight,
-  ArrowDownRight,
-  Sparkles
+  Sparkles,
+  PlusCircle,
+  BarChart3
 } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
+import { IncomePage } from './IncomePage';
+import { ExpensePage } from './ExpensePage';
+import { BudgetsView } from '../components/BudgetsView';
+import { GoalsView } from '../components/GoalsView';
+import { DashboardView } from '../components/DashboardView';
+import { AnalyticsView } from '../components/AnalyticsView';
+import { PeriodFilterDropdown } from '../components/PeriodFilterDropdown';
+import {
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
+  type NotificationItem
+} from '../api/notifications';
+import { NotificationsDropdown } from '../components/NotificationsDropdown';
+import { NotificationsPage } from './NotificationsPage';
+import { SettingsView } from '../components/SettingsView';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -31,24 +43,173 @@ interface UserProfile {
   role: string;
 }
 
+const VALID_TABS = [
+  'dashboard',
+  'analytics',
+  'income',
+  'transactions',
+  'budgets',
+  'goals',
+  'notifications',
+  'tips',
+  'settings',
+  'help'
+];
+
+const getInitialTab = (): string => {
+  const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+  if (VALID_TABS.includes(hash)) {
+    return hash;
+  }
+  const saved = localStorage.getItem('fintrack_active_tab')?.toLowerCase();
+  if (saved && VALID_TABS.includes(saved)) {
+    return saved;
+  }
+  return 'dashboard';
+};
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
-  const { theme, toggleTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
+
+  const setActiveTab = React.useCallback((tab: string) => {
+    const targetTab = VALID_TABS.includes(tab) ? tab : 'dashboard';
+    setActiveTabState(targetTab);
+    localStorage.setItem('fintrack_active_tab', targetTab);
+    if (window.location.hash.replace(/^#\/?/, '') !== targetTab) {
+      window.history.replaceState(null, '', `#${targetTab}`);
+    }
+  }, []);
+
+  // Sync when browser Back / Forward buttons are clicked or hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      if (VALID_TABS.includes(hash)) {
+        setActiveTabState(hash);
+        localStorage.setItem('fintrack_active_tab', hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Ensure initial hash is in the URL on mount
+  useEffect(() => {
+    if (!window.location.hash) {
+      window.history.replaceState(null, '', `#${activeTab}`);
+    }
+  }, [activeTab]);
+
   const [user, setUser] = useState<UserProfile | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // Notifications State & Engine Polling
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
+  const [highlightedBudgetId, setHighlightedBudgetId] = useState<string | null>(null);
+  const [highlightedGoalId, setHighlightedGoalId] = useState<string | null>(null);
+
+  const handleNavigateWithHighlight = (tab: string, targetId?: string | null) => {
+    let target = tab;
+    if (target === 'reports') target = 'analytics';
+    const validTab = (target && target !== 'dashboard') ? target : (targetId ? 'budgets' : 'budgets');
+    if (validTab === 'budgets') {
+      setHighlightedBudgetId(targetId || null);
+    } else if (validTab === 'goals') {
+      setHighlightedGoalId(targetId || null);
+    }
+    setActiveTab(validTab);
+  };
+
+  const loadNotifications = React.useCallback(() => {
+    fetchNotifications()
+      .then((data) => {
+        setNotifications(data.items || []);
+        setUnreadNotifCount(data.unread_count || 0);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 15000);
+    return () => clearInterval(interval);
+  }, [loadNotifications]);
+
+  const handleMarkNotifRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+      setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+    } catch {}
+  };
+
+  const handleMarkAllNotifsRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadNotifCount(0);
+    } catch {}
+  };
+
+  const handleDeleteNotif = async (id: string) => {
+    try {
+      await deleteNotification(id);
+      setNotifications((prev) => {
+        const target = prev.find((n) => n.id === id);
+        if (target && !target.is_read) {
+          setUnreadNotifCount((cnt) => Math.max(0, cnt - 1));
+        }
+        return prev.filter((n) => n.id !== id);
+      });
+    } catch {}
+  };
+
+  // Period filter states: Monthly, Quarterly, Half Year, Year (defaults dynamically to current calendar period)
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentQuarter = Math.ceil(currentMonth / 3);
+  const currentHalf = currentMonth <= 6 ? 1 : 2;
+
+  const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'half_year' | 'yearly'>('monthly');
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(currentQuarter);
+  const [selectedHalf, setSelectedHalf] = useState<number>(currentHalf);
+
+  const monthsShort = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  let periodLabel = `${monthsShort[selectedMonth]} ${selectedYear}`;
+  if (periodType === 'quarterly') {
+    const qLabels = ['', 'Jan - Mar', 'Apr - Jun', 'Jul - Sep', 'Oct - Dec'];
+    periodLabel = `Q${selectedQuarter} ${selectedYear} (${qLabels[selectedQuarter]})`;
+  } else if (periodType === 'half_year') {
+    const hLabels = ['', 'Jan - Jun', 'Jul - Dec'];
+    periodLabel = `H${selectedHalf} ${selectedYear} (${hLabels[selectedHalf]})`;
+  } else if (periodType === 'yearly') {
+    periodLabel = `Year ${selectedYear}`;
+  }
 
   useEffect(() => {
     // Fetch logged in user details
     api.get('/auth/me')
       .then((res) => setUser(res.data))
-      .catch(() => {
-        // Fallback demo user if token is mock or offline
-        setUser({ name: 'Sweni Shah', email: 'sweni@fintrack.com', role: 'USER' });
+      .catch((err) => {
+        console.error('Failed to verify user session:', err);
+        onLogout();
       });
-  }, []);
+  }, [onLogout]);
 
-  const userName = user?.name || 'Sweni Shah';
-  const userInitials = userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'SS';
+  const userName = user?.name || 'User';
+  const userInitials = userName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+
+  const handleProfileUpdate = (updated: { name: string; email?: string }) => {
+    setUser((prev) => (prev ? { ...prev, ...updated } : { name: updated.name, email: updated.email || '', role: 'user' }));
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg)' }}>
@@ -112,6 +273,50 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             >
               <LayoutDashboard size={18} />
               Dashboard
+            </button>
+
+            <button
+              onClick={() => setActiveTab('analytics')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-btn)',
+                border: 'none',
+                backgroundColor: activeTab === 'analytics' ? 'var(--light-accent)' : 'transparent',
+                color: activeTab === 'analytics' ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: activeTab === 'analytics' ? 600 : 500,
+                fontSize: '14px',
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              <BarChart3 size={18} />
+              Analytics
+            </button>
+
+            <button
+              onClick={() => setActiveTab('income')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-btn)',
+                border: 'none',
+                backgroundColor: activeTab === 'income' ? 'var(--light-accent)' : 'transparent',
+                color: activeTab === 'income' ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: activeTab === 'income' ? 600 : 500,
+                fontSize: '14px',
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              <PlusCircle size={18} />
+              Income
             </button>
 
             <button
@@ -181,25 +386,39 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('reports')}
+              onClick={() => setActiveTab('notifications')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                justifyContent: 'space-between',
                 width: '100%',
                 padding: '10px 12px',
                 borderRadius: 'var(--radius-btn)',
                 border: 'none',
-                backgroundColor: activeTab === 'reports' ? 'var(--light-accent)' : 'transparent',
-                color: activeTab === 'reports' ? 'var(--accent)' : 'var(--secondary-text)',
-                fontWeight: activeTab === 'reports' ? 600 : 500,
+                backgroundColor: activeTab === 'notifications' ? 'var(--light-accent)' : 'transparent',
+                color: activeTab === 'notifications' ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: activeTab === 'notifications' ? 600 : 500,
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left'
               }}
             >
-              <FileText size={18} />
-              Reports
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Bell size={18} />
+                <span>Notifications</span>
+              </div>
+              {unreadNotifCount > 0 && (
+                <span style={{
+                  backgroundColor: 'var(--accent)',
+                  color: '#FFFFFF',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: '999px'
+                }}>
+                  {unreadNotifCount}
+                </span>
+              )}
             </button>
 
             <button
@@ -300,65 +519,76 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           padding: '0 28px',
           position: 'sticky',
           top: 0,
           zIndex: 40,
           transition: 'background-color 0.2s ease, border-color 0.2s ease'
         }}>
-          {/* Search Bar */}
-          <div style={{ position: 'relative', width: '320px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
-            <input 
-              type="text"
-              placeholder="Search transactions, categories..."
-              className="input-field"
-              style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
-            />
-          </div>
-
           {/* Right Header Tools */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {/* Month Picker */}
-            <span style={{
-              fontSize: '12.5px',
-              padding: '7px 12px',
-              backgroundColor: 'var(--card-subtle)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--main-text)',
-              fontWeight: 500
-            }}>
-              📅 Apr 2026 ▾
-            </span>
+            {/* Header Period Filter Dropdown: Monthly, Quarterly, Half Year, Year (defaults to Apr 2026) */}
+            <PeriodFilterDropdown
+              periodType={periodType}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              selectedQuarter={selectedQuarter}
+              selectedHalf={selectedHalf}
+              onPeriodTypeChange={(t) => setPeriodType(t)}
+              onYearChange={(y) => setSelectedYear(y)}
+              onMonthChange={(m) => setSelectedMonth(m)}
+              onQuarterChange={(q) => setSelectedQuarter(q)}
+              onHalfChange={(h) => setSelectedHalf(h)}
+            />
 
-            {/* Notification Bell */}
-            <button 
-              className="theme-toggle-btn"
-              title="Notifications"
-              style={{ position: 'relative' }}
-            >
-              <Bell size={17} />
-              <span style={{
-                position: 'absolute',
-                top: '6px',
-                right: '6px',
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--danger)'
-              }}></span>
-            </button>
+            {/* Notification Bell Dropdown */}
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <button 
+                onClick={() => setIsNotifDropdownOpen(!isNotifDropdownOpen)}
+                className="theme-toggle-btn"
+                title="Notifications"
+                aria-label="Notifications"
+                style={{ position: 'relative' }}
+              >
+                <Bell size={18} />
+              </button>
 
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="theme-toggle-btn"
-              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
+              {unreadNotifCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  minWidth: '18px',
+                  height: '18px',
+                  borderRadius: '999px',
+                  backgroundColor: 'var(--danger)',
+                  color: '#FFFFFF',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 4px',
+                  border: '2px solid var(--card)',
+                  pointerEvents: 'none',
+                  zIndex: 10
+                }}>
+                  {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                </span>
+              )}
+
+              <NotificationsDropdown
+                isOpen={isNotifDropdownOpen}
+                onClose={() => setIsNotifDropdownOpen(false)}
+                notifications={notifications}
+                unreadCount={unreadNotifCount}
+                onMarkRead={handleMarkNotifRead}
+                onMarkAllRead={handleMarkAllNotifsRead}
+                onNavigateTab={handleNavigateWithHighlight}
+                onViewAll={() => setActiveTab('notifications')}
+              />
+            </div>
 
             {/* User Avatar & Logout */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px' }}>
@@ -401,277 +631,81 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           </div>
         </header>
 
-        {/* Dashboard Body Content */}
-        <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
-          
-          {/* Welcome Banner */}
-          <div style={{ marginBottom: '24px' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px' }}>
-              Good Morning, {userName.split(' ')[0]}! 👋
-            </h1>
-            <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)' }}>
-              Here's your financial overview for April 2026.
-            </p>
-          </div>
-
-          {/* 3 Metrics Cards + Financial Health Score Card */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '18px',
-            marginBottom: '24px'
-          }}>
-            {/* Total Income */}
-            <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--accent)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Total Income</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--light-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-                  <ArrowUpRight size={14} />
-                </span>
-              </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
-                ₹85,000
-              </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, marginTop: '4px' }}>
-                ↑ 12% vs. last month
-              </div>
-            </div>
-
-            {/* Total Expenses */}
-            <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--danger)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Total Expenses</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
-                  <ArrowDownRight size={14} />
-                </span>
-              </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
-                ₹42,000
-              </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--danger)', fontWeight: 600, marginTop: '4px' }}>
-                ↑ 5% vs. last month
-              </div>
-            </div>
-
-            {/* Net Savings */}
-            <div className="card-box" style={{ padding: '18px', borderLeft: '4px solid var(--info)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Savings</span>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--info)' }}>
-                  ★
-                </span>
-              </div>
-              <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
-                ₹43,000
-              </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, marginTop: '4px' }}>
-                ↑ 18% vs. last month
-              </div>
-            </div>
-
-            {/* Financial Health Score Widget */}
-            <div className="card-box" style={{ padding: '18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>Financial Health</span>
-                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--accent)' }}>Good</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', margin: '4px 0' }}>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)' }}>78</span>
-                <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>/ 100</span>
-              </div>
-              <div style={{ height: '7px', borderRadius: '4px', backgroundColor: 'var(--border)', overflow: 'hidden' }}>
-                <div style={{ width: '78%', height: '100%', backgroundColor: 'var(--accent)', borderRadius: '4px' }}></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Middle Row: Charts + Breakdown */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-            gap: '18px',
-            marginBottom: '24px'
-          }}>
-            {/* Income vs Expenses Bar Chart */}
-            <div className="card-box" style={{ padding: '22px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>Income vs Expenses</span>
-                <span style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>Last 6 Months ▾</span>
-              </div>
-
-              <svg viewBox="0 0 420 130" width="100%" height="130">
-                <line x1="0" y1="30" x2="420" y2="30" stroke="var(--border)" strokeDasharray="3,3" opacity="0.6" />
-                <line x1="0" y1="75" x2="420" y2="75" stroke="var(--border)" strokeDasharray="3,3" opacity="0.6" />
-                <line x1="0" y1="120" x2="420" y2="120" stroke="var(--border)" />
-                
-                {/* Jan */}
-                <rect x="25" y="50" width="14" height="70" rx="3" fill="#10B981" />
-                <rect x="42" y="70" width="14" height="50" rx="3" fill="#EF4444" />
-                {/* Feb */}
-                <rect x="95" y="42" width="14" height="78" rx="3" fill="#10B981" />
-                <rect x="112" y="65" width="14" height="55" rx="3" fill="#EF4444" />
-                {/* Mar */}
-                <rect x="165" y="36" width="14" height="84" rx="3" fill="#10B981" />
-                <rect x="182" y="60" width="14" height="60" rx="3" fill="#EF4444" />
-                {/* Apr */}
-                <rect x="235" y="26" width="14" height="94" rx="3" fill="#10B981" />
-                <rect x="252" y="58" width="14" height="62" rx="3" fill="#EF4444" />
-                {/* May */}
-                <rect x="305" y="20" width="14" height="100" rx="3" fill="#10B981" />
-                <rect x="322" y="52" width="14" height="68" rx="3" fill="#EF4444" />
-                {/* Jun */}
-                <rect x="375" y="15" width="14" height="105" rx="3" fill="#10B981" />
-                <rect x="392" y="48" width="14" height="72" rx="3" fill="#EF4444" />
-              </svg>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--secondary-text)', marginTop: '10px' }}>
-                <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
-              </div>
-              <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '12px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)' }}>
-                  <i style={{ width: '8px', height: '8px', background: '#10B981', borderRadius: '2px', display: 'inline-block' }}></i> Income
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)' }}>
-                  <i style={{ width: '8px', height: '8px', background: '#EF4444', borderRadius: '2px', display: 'inline-block' }}></i> Expenses
-                </span>
-              </div>
-            </div>
-
-            {/* Expense Breakdown Donut & Legend */}
-            <div className="card-box" style={{ padding: '22px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>Expense Breakdown</span>
-                <span style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 600 }}>₹42,000 total</span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                {/* Donut representation */}
-                <div style={{
-                  width: '110px',
-                  height: '110px',
-                  borderRadius: '50%',
-                  background: 'conic-gradient(#10B981 0 32%, #3B82F6 32% 60%, #F59E0B 60% 72%, #8B5CF6 72% 82%, #64748B 82% 100%)',
-                  position: 'relative',
-                  flexShrink: 0
-                }}>
-                  <div style={{
-                    position: 'absolute',
-                    inset: '20px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--card)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: 'var(--primary)'
-                  }}>
-                    ₹42k
-                  </div>
-                </div>
-
-                {/* Legend list */}
-                <div style={{ flex: 1, fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#10B981', borderRadius: '2px', marginRight: '6px' }}></i>Food & Dining (32%)</span>
-                    <b>₹13,440</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#3B82F6', borderRadius: '2px', marginRight: '6px' }}></i>Rent (28%)</span>
-                    <b>₹11,760</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#F59E0B', borderRadius: '2px', marginRight: '6px' }}></i>Transport (12%)</span>
-                    <b>₹5,040</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#8B5CF6', borderRadius: '2px', marginRight: '6px' }}></i>Shopping (10%)</span>
-                    <b>₹4,200</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--main-text)' }}>
-                    <span><i style={{ display: 'inline-block', width: '8px', height: '8px', background: '#64748B', borderRadius: '2px', marginRight: '6px' }}></i>Others (18%)</span>
-                    <b>₹7,560</b>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Row: Recent Transactions Table */}
-          <div className="card-box" style={{ padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)' }}>Recent Transactions</span>
-              <span style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}>View All &rarr;</span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Row 1 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-                    <ArrowUpRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Salary</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 25, 2026 · Bank transfer</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent)' }}>
-                  +₹50,000
-                </div>
-              </div>
-
-              {/* Row 2 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
-                    <ArrowDownRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Groceries</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 24, 2026 · UPI</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--danger)' }}>
-                  -₹2,850
-                </div>
-              </div>
-
-              {/* Row 3 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>
-                    <ArrowDownRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Electricity Bill</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 22, 2026 · UPI</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--danger)' }}>
-                  -₹1,200
-                </div>
-              </div>
-
-              {/* Row 4 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--light-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-                    <ArrowUpRight size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>Freelance Work</div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>Apr 20, 2026 · Card</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent)' }}>
-                  +₹8,000
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </main>
+        {/* Body Content */}
+        {activeTab === 'analytics' ? (
+          <main style={{ width: '100%' }}>
+            <AnalyticsView
+              periodType={periodType}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              selectedQuarter={selectedQuarter}
+              selectedHalf={selectedHalf}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          </main>
+        ) : activeTab === 'income' ? (
+          <IncomePage
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            periodType={periodType}
+            selectedQuarter={selectedQuarter}
+            selectedHalf={selectedHalf}
+            periodLabel={periodLabel}
+          />
+        ) : activeTab === 'transactions' || activeTab === 'expenses' ? (
+          <ExpensePage
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            periodType={periodType}
+            selectedQuarter={selectedQuarter}
+            selectedHalf={selectedHalf}
+            periodLabel={periodLabel}
+          />
+        ) : activeTab === 'budgets' ? (
+          <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
+            <BudgetsView
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              periodType={periodType}
+              selectedQuarter={selectedQuarter}
+              selectedHalf={selectedHalf}
+              highlightedBudgetId={highlightedBudgetId}
+              onClearHighlight={() => setHighlightedBudgetId(null)}
+            />
+          </main>
+        ) : activeTab === 'goals' ? (
+          <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
+            <GoalsView
+              highlightedGoalId={highlightedGoalId}
+              onClearHighlight={() => setHighlightedGoalId(null)}
+              onRefreshNotifications={loadNotifications}
+            />
+          </main>
+        ) : activeTab === 'notifications' ? (
+          <main style={{ width: '100%' }}>
+            <NotificationsPage
+              notifications={notifications}
+              onMarkRead={handleMarkNotifRead}
+              onMarkAllRead={handleMarkAllNotifsRead}
+              onDelete={handleDeleteNotif}
+              onNavigateTab={handleNavigateWithHighlight}
+            />
+          </main>
+        ) : activeTab === 'settings' ? (
+          <main style={{ width: '100%' }}>
+            <SettingsView initialName={userName} onProfileUpdate={handleProfileUpdate} />
+          </main>
+        ) : (
+          <DashboardView
+            periodType={periodType}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            selectedQuarter={selectedQuarter}
+            selectedHalf={selectedHalf}
+            userName={userName}
+            onNavigateTab={(tab) => setActiveTab(tab)}
+          />
+        )}
       </div>
 
       {/* Logout Confirmation Modal */}
@@ -702,7 +736,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               width: '52px',
               height: '52px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              backgroundColor: 'var(--light-danger)',
               color: 'var(--danger)',
               display: 'flex',
               alignItems: 'center',
@@ -728,6 +762,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               <button
                 onClick={() => {
                   setShowLogoutModal(false);
+                  localStorage.removeItem('fintrack_active_tab');
+                  if (window.location.hash) {
+                    window.history.replaceState(null, '', window.location.pathname);
+                  }
                   onLogout();
                 }}
                 style={{

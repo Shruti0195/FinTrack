@@ -133,7 +133,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onOpenLogi
                 alignItems: 'center',
                 gap: '10px',
                 padding: '12px 14px',
-                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                backgroundColor: 'var(--light-danger)',
                 color: 'var(--danger)',
                 borderRadius: '8px',
                 fontSize: '13px',
@@ -152,7 +152,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onOpenLogi
                   New Password
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                  <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
                   <input
                     type="password"
                     required
@@ -170,7 +170,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onOpenLogi
                   Confirm New Password
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                  <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
                   <input
                     type="password"
                     required
