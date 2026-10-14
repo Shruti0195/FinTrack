@@ -5,6 +5,7 @@ import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthModal } from './components/AuthModal';
 
 function AppContent() {
@@ -12,19 +13,21 @@ function AppContent() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [userLoggedIn, setUserLoggedIn] = useState(() => !!localStorage.getItem('token'));
   
-  const [pageRoute, setPageRoute] = useState<'home' | 'verify-email' | 'reset-password'>(() => {
+  const [pageRoute, setPageRoute] = useState<'home' | 'verify-email' | 'reset-password' | 'not-found'>(() => {
     const path = window.location.pathname;
+    if (path === '' || path === '/') return 'home';
     if (path.startsWith('/verify-email')) return 'verify-email';
     if (path.startsWith('/reset-password')) return 'reset-password';
-    return 'home';
+    return 'not-found';
   });
 
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path.startsWith('/verify-email')) setPageRoute('verify-email');
+      if (path === '' || path === '/') setPageRoute('home');
+      else if (path.startsWith('/verify-email')) setPageRoute('verify-email');
       else if (path.startsWith('/reset-password')) setPageRoute('reset-password');
-      else setPageRoute('home');
+      else setPageRoute('not-found');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -58,6 +61,29 @@ function AppContent() {
     setUserLoggedIn(false);
   };
 
+  // If route does not exist, render NotFoundPage for both guests and authenticated users
+  if (pageRoute === 'not-found') {
+    return (
+      <NotFoundPage
+        isLoggedIn={userLoggedIn}
+        onGoHome={() => {
+          window.history.pushState(null, '', '/');
+          setPageRoute('home');
+        }}
+        onGoDashboard={(tab) => {
+          const hash = tab ? `#${tab}` : (window.location.hash || '#dashboard');
+          window.history.pushState(null, '', `/${hash}`);
+          setPageRoute('home');
+        }}
+        onOpenAuth={(mode) => {
+          window.history.pushState(null, '', '/');
+          setPageRoute('home');
+          handleOpenAuth(mode);
+        }}
+      />
+    );
+  }
+
   // If user is authenticated, render the Dashboard View directly
   if (userLoggedIn) {
     return <DashboardPage onLogout={handleLogout} />;
@@ -72,10 +98,12 @@ function AppContent() {
       {pageRoute === 'verify-email' && (
         <VerifyEmailPage
           onOpenLogin={() => {
+            window.history.pushState(null, '', '/');
             setPageRoute('home');
             handleOpenAuth('login');
           }}
           onGoHome={() => {
+            window.history.pushState(null, '', '/');
             setPageRoute('home');
           }}
         />
@@ -84,10 +112,12 @@ function AppContent() {
       {pageRoute === 'reset-password' && (
         <ResetPasswordPage
           onOpenLogin={() => {
+            window.history.pushState(null, '', '/');
             setPageRoute('home');
             handleOpenAuth('login');
           }}
           onGoHome={() => {
+            window.history.pushState(null, '', '/');
             setPageRoute('home');
           }}
         />

@@ -36,6 +36,7 @@ import {
 import { NotificationsDropdown } from '../components/NotificationsDropdown';
 import { NotificationDetailModal } from '../components/NotificationDetailModal';
 import { SettingsView } from '../components/SettingsView';
+import { NotFoundPage } from './NotFoundPage';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -52,6 +53,7 @@ const VALID_TABS = [
   'analytics',
   'income',
   'transactions',
+  'expenses',
   'budgets',
   'goals',
   'tips',
@@ -60,9 +62,12 @@ const VALID_TABS = [
 ];
 
 const getInitialTab = (): string => {
-  const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
-  if (VALID_TABS.includes(hash)) {
-    return hash;
+  const hash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
+  if (hash) {
+    if (VALID_TABS.includes(hash)) {
+      return hash;
+    }
+    return 'not-found';
   }
   const saved = localStorage.getItem('fintrack_active_tab')?.toLowerCase();
   if (saved && VALID_TABS.includes(saved)) {
@@ -87,19 +92,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   // Sync when browser Back / Forward buttons are clicked or hash changes
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      const hash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
+      if (!hash) {
+        setActiveTabState('dashboard');
+        return;
+      }
       if (VALID_TABS.includes(hash)) {
         setActiveTabState(hash);
         localStorage.setItem('fintrack_active_tab', hash);
+      } else {
+        setActiveTabState('not-found');
       }
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Ensure initial hash is in the URL on mount
+  // Ensure initial hash is in the URL on mount (if valid tab)
   useEffect(() => {
-    if (!window.location.hash) {
+    if (!window.location.hash && activeTab !== 'not-found') {
       window.history.replaceState(null, '', `#${activeTab}`);
     }
   }, [activeTab]);
@@ -717,7 +728,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         </header>
 
         {/* Body Content */}
-        {activeTab === 'analytics' ? (
+        {activeTab === 'not-found' ? (
+          <NotFoundPage
+            embedded={true}
+            isLoggedIn={true}
+            onGoDashboard={(tab) => setActiveTab(tab || 'dashboard')}
+          />
+        ) : activeTab === 'analytics' ? (
           <main style={{ width: '100%' }}>
             <AnalyticsView
               periodType={periodType}

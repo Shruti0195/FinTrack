@@ -728,29 +728,35 @@ export const IncomePage: React.FC<IncomePageProps> = ({
   };
 
   return (
-    <div style={{ maxWidth: '1240px', margin: '0 auto', padding: '24px 28px 60px' }}>
+    <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
       
       {/* Toast Notification */}
       {feedbackMsg && (
         <div style={{
           position: 'fixed',
-          top: '24px',
-          right: '28px',
-          zIndex: 9999,
-          backgroundColor: feedbackMsg.type === 'success' ? 'var(--success)' : 'var(--danger)',
+          top: '20px',
+          right: '20px',
+          zIndex: 1000,
+          backgroundColor: feedbackMsg.type === 'success' ? '#10B981' : '#EF4444',
           color: '#FFFFFF',
           padding: '12px 18px',
           borderRadius: '8px',
           boxShadow: 'var(--shadow-lg)',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          fontSize: '14px',
+          gap: '10px',
+          fontSize: '13.5px',
           fontWeight: 600,
           animation: 'fadeIn 0.2s ease'
         }}>
           {feedbackMsg.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
           <span>{feedbackMsg.text}</span>
+          <button
+            onClick={() => setFeedbackMsg(null)}
+            style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', padding: 0, marginLeft: '8px' }}
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
 
@@ -761,19 +767,19 @@ export const IncomePage: React.FC<IncomePageProps> = ({
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '16px',
-        marginBottom: '28px'
+        marginBottom: '24px'
       }}>
         <div>
-          <h1 className="page-heading" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px', letterSpacing: '-0.02em' }}>
             Income
           </h1>
-          <p className="normal-text" style={{ fontSize: '15px', color: 'var(--secondary-text)' }}>
+          <p style={{ fontSize: '14px', color: 'var(--secondary-text)' }}>
             Track and manage your revenue streams, earnings, and financial inflows.
           </p>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {/* Export Dropdown Menu (CSV or PDF) */}
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button
@@ -879,15 +885,18 @@ export const IncomePage: React.FC<IncomePageProps> = ({
             onClick={handleOpenAdd}
             className="btn-primary"
             style={{
-              padding: '9px 18px',
-              fontSize: '14px',
-              height: '42px',
-              backgroundColor: 'var(--accent)',
-              color: '#FFFFFF',
-              gap: '6px'
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+              borderRadius: 'var(--radius-btn)',
+              cursor: 'pointer',
+              height: '42px'
             }}
           >
-            <Plus size={18} strokeWidth={2.5} />
+            <Plus size={16} strokeWidth={2.5} />
             <span>Add Income</span>
           </button>
         </div>
@@ -896,14 +905,21 @@ export const IncomePage: React.FC<IncomePageProps> = ({
       {/* 2. STATS & KPI METRIC CARDS (4 CARDS) */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: '18px',
-        marginBottom: '28px'
+        marginBottom: '24px'
       }}>
         {/* Total Income */}
-        <div className="card-box" style={{ padding: '22px 24px', borderLeft: '4px solid var(--accent)' }}>
+        <div className="card-box" style={{
+          padding: '20px',
+          borderLeft: '4px solid var(--accent)',
+          minHeight: '130px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', color: 'var(--secondary-text)', fontWeight: 500 }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>
               Total Income ({activePeriodLabel})
             </span>
             <span style={{
@@ -919,19 +935,18 @@ export const IncomePage: React.FC<IncomePageProps> = ({
               <DollarSign size={16} strokeWidth={2.5} />
             </span>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px', letterSpacing: '-0.02em' }}>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--accent)', letterSpacing: '-0.02em', margin: '4px 0' }}>
             {formatCurrency(stats.total_income_this_month)}
           </div>
           <div style={{
             fontSize: '12px',
             color: stats.month_over_month_change_pct >= 0 ? 'var(--accent)' : 'var(--danger)',
             fontWeight: 600,
-            marginTop: '4px',
             display: 'flex',
             alignItems: 'center',
             gap: '4px'
           }}>
-            <TrendingUp size={14} />
+            <TrendingUp size={13} />
             <span>
               {stats.month_over_month_change_pct >= 0 ? `+${stats.month_over_month_change_pct}%` : `${stats.month_over_month_change_pct}%`} vs last month
             </span>
@@ -939,9 +954,15 @@ export const IncomePage: React.FC<IncomePageProps> = ({
         </div>
 
         {/* Entries Count */}
-        <div className="card-box" style={{ padding: '22px 24px' }}>
+        <div className="card-box" style={{
+          padding: '20px',
+          minHeight: '130px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', color: 'var(--secondary-text)', fontWeight: 500 }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>
               Recorded Inflows
             </span>
             <span style={{
@@ -954,21 +975,27 @@ export const IncomePage: React.FC<IncomePageProps> = ({
               justifyContent: 'center',
               color: 'var(--info)'
             }}>
-              <CreditCard size={16} />
+              <CreditCard size={15} />
             </span>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
-            {stats.entries_count_this_month} <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--secondary-text)' }}>entries</span>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em', margin: '4px 0' }}>
+            {stats.entries_count_this_month} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--secondary-text)' }}>entries</span>
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--secondary-text)', marginTop: '4px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>
             In {activePeriodLabel}
           </div>
         </div>
 
         {/* Average per Inflow */}
-        <div className="card-box" style={{ padding: '22px 24px' }}>
+        <div className="card-box" style={{
+          padding: '20px',
+          minHeight: '130px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', color: 'var(--secondary-text)', fontWeight: 500 }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>
               Average per Entry
             </span>
             <span style={{
@@ -981,31 +1008,37 @@ export const IncomePage: React.FC<IncomePageProps> = ({
               justifyContent: 'center',
               color: 'var(--warning)'
             }}>
-              <PieChart size={16} />
+              <PieChart size={15} />
             </span>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em', margin: '4px 0' }}>
             {formatCurrency(stats.avg_income_per_entry)}
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--secondary-text)', marginTop: '4px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>
             Across all income streams
           </div>
         </div>
 
         {/* Top Income Source */}
-        <div className="card-box" style={{ padding: '22px 24px' }}>
+        <div className="card-box" style={{
+          padding: '20px',
+          minHeight: '130px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', color: 'var(--secondary-text)', fontWeight: 500 }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--secondary-text)', fontWeight: 500 }}>
               Top Income Stream
             </span>
-            <span className="badge-pill" style={{ fontSize: '11px', padding: '3px 8px' }}>
+            <span className="badge-pill" style={{ fontSize: '11px', padding: '2px 8px' }}>
               {stats.top_source_percentage > 0 ? `${stats.top_source_percentage}%` : 'Primary'}
             </span>
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', marginTop: '8px' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em', margin: '4px 0' }}>
             {stats.top_source_name || 'Salary'}
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 600, marginTop: '4px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 600 }}>
             {stats.top_source_amount > 0 ? formatCurrency(stats.top_source_amount) : 'Leading source'}
           </div>
         </div>
@@ -1022,7 +1055,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
         }}>
           
           {/* Left: Search input */}
-          <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: '340px' }}>
+          <div style={{ position: 'relative', flex: '1 1 300px', maxWidth: '420px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--secondary-text)' }} />
             <input
               type="text"
@@ -1035,8 +1068,10 @@ export const IncomePage: React.FC<IncomePageProps> = ({
               className="input-field"
               style={{
                 paddingLeft: '36px',
-                height: '40px',
-                fontSize: '13.5px',
+                paddingRight: search ? '32px' : '12px',
+                height: '38px',
+                fontSize: '13px',
+                width: '100%',
                 backgroundColor: 'var(--input-bg)'
               }}
             />
@@ -1070,28 +1105,28 @@ export const IncomePage: React.FC<IncomePageProps> = ({
       </div>
 
       {/* 4. INCOME DATA TABLE */}
-      <div className="card-box" style={{ padding: '0', overflow: 'hidden' }}>
+      <div className="card-box" style={{ padding: '0', overflow: 'hidden', marginBottom: '24px' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13.5px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
               <tr style={{
                 backgroundColor: 'var(--card-subtle)',
                 borderBottom: '1px solid var(--border)',
                 color: 'var(--secondary-text)'
               }}>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <th style={{ padding: '14px 18px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {renderSortHeader('Date', 'date')}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <th style={{ padding: '14px 18px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {renderSortHeader('Source / Category', 'category')}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <th style={{ padding: '14px 18px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {renderSortHeader('Description', 'description')}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>
+                <th style={{ padding: '14px 18px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>
                   {renderSortHeader('Amount', 'amount', 'right')}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', width: '110px' }}>Actions</th>
+                <th style={{ padding: '14px 18px', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', width: '110px' }}>Actions</th>
               </tr>
 
               {/* Column Filter Row */}
@@ -1100,7 +1135,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                 borderBottom: '2px solid var(--border)'
               }}>
                 {/* 1. Date Column Filter - Removed per user request */}
-                <th style={{ padding: '6px 12px 10px 20px' }}></th>
+                <th style={{ padding: '6px 12px 10px 18px' }}></th>
 
                 {/* 2. Source / Category Column Filter */}
                 <th style={{ padding: '6px 12px 10px 12px' }}>
@@ -1134,7 +1169,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                 </th>
 
                 {/* 4. Amount Column Filter (Min / Max) */}
-                <th style={{ padding: '6px 20px 10px 12px' }}>
+                <th style={{ padding: '6px 18px 10px 12px' }}>
                   <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
                     <input
                       type="number"
@@ -1179,7 +1214,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                 </th>
 
                 {/* 5. Actions Column (Clear Filters) */}
-                <th style={{ padding: '6px 20px 10px 12px', textAlign: 'center' }}>
+                <th style={{ padding: '6px 18px 10px 12px', textAlign: 'center' }}>
                   {hasActiveColumnFilters && (
                     <button
                       onClick={resetColumnFilters}
@@ -1257,12 +1292,12 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
                     {/* Date */}
-                    <td style={{ padding: '16px 20px', color: 'var(--secondary-text)', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '12px 18px', color: 'var(--secondary-text)', whiteSpace: 'nowrap' }}>
                       {formatDate(inc.transaction_date)}
                     </td>
 
                     {/* Source / Category badge */}
-                    <td style={{ padding: '16px 20px' }}>
+                    <td style={{ padding: '12px 18px' }}>
                       <span
                         className="badge-pill"
                         style={{
@@ -1277,16 +1312,16 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                     </td>
 
                     {/* Description */}
-                    <td style={{ padding: '16px 20px', color: 'var(--main-text)', fontWeight: 500 }}>
+                    <td style={{ padding: '12px 18px', color: 'var(--main-text)', fontWeight: 500 }}>
                       {inc.description || <span style={{ color: 'var(--secondary-text)', fontStyle: 'italic' }}>No description</span>}
                     </td>
 
                     {/* Amount */}
                     <td style={{
-                      padding: '16px 20px',
+                      padding: '12px 18px',
                       textAlign: 'right',
                       fontWeight: 700,
-                      fontSize: '15px',
+                      fontSize: '14px',
                       color: 'var(--accent)',
                       whiteSpace: 'nowrap'
                     }}>
@@ -1294,7 +1329,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                     </td>
 
                     {/* Actions */}
-                    <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                    <td style={{ padding: '12px 18px', textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                         <button
                           onClick={() => handleOpenEdit(inc)}
@@ -1798,6 +1833,6 @@ export const IncomePage: React.FC<IncomePageProps> = ({
         </div>
       )}
 
-    </div>
+    </main>
   );
 };
