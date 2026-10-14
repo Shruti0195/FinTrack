@@ -16,6 +16,7 @@ export interface FinancialHealthScoreData {
   status_color: string;
   factors_calculated_count: number;
   total_factors_count: number;
+  has_enough_data?: boolean;
   score_notes: string[];
   improvement_line: string;
   missing_factor_note?: string | null;

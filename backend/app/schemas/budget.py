@@ -1,19 +1,32 @@
 from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Literal
+from typing import Optional, Literal, List
+
+class BudgetAlertSettings(BaseModel):
+    thresholds: List[int] = Field(default=[80, 100], description="Alert percentage thresholds, up to 5, between 1 and 150")
+    in_app: bool = True
+    email: bool = True
 
 class BudgetBase(BaseModel):
     category_id: UUID
     month: int = Field(..., ge=1, le=12, description="Month (1-12)")
     year: int = Field(..., ge=2000, le=2100, description="Year (e.g. 2026)")
     limit_amount: float = Field(..., gt=0, description="Monthly spending limit, must be greater than 0")
+    has_custom_alerts: Optional[bool] = False
+    custom_alert_thresholds: Optional[List[int]] = None
+    custom_alert_in_app: Optional[bool] = None
+    custom_alert_email: Optional[bool] = None
 
 class BudgetCreate(BudgetBase):
     apply_to_period: Optional[Literal["single_month", "quarter", "half_year", "year"]] = "single_month"
 
 class BudgetUpdate(BaseModel):
-    limit_amount: float = Field(..., gt=0, description="Updated monthly spending limit")
+    limit_amount: Optional[float] = Field(None, gt=0, description="Updated monthly spending limit")
+    has_custom_alerts: Optional[bool] = None
+    custom_alert_thresholds: Optional[List[int]] = None
+    custom_alert_in_app: Optional[bool] = None
+    custom_alert_email: Optional[bool] = None
 
 class BudgetResponse(BaseModel):
     id: Optional[UUID] = None
@@ -31,6 +44,10 @@ class BudgetResponse(BaseModel):
     period_type: str = "monthly"
     period_label: Optional[str] = None
     months_budgeted: Optional[int] = 1
+    has_custom_alerts: bool = False
+    custom_alert_thresholds: Optional[List[int]] = None
+    custom_alert_in_app: Optional[bool] = None
+    custom_alert_email: Optional[bool] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

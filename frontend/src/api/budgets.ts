@@ -18,8 +18,18 @@ export interface Budget {
   period_type?: BudgetPeriodType;
   period_label?: string;
   months_budgeted?: number;
+  has_custom_alerts?: boolean;
+  custom_alert_thresholds?: number[] | null;
+  custom_alert_in_app?: boolean | null;
+  custom_alert_email?: boolean | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface BudgetAlertSettings {
+  thresholds: number[];
+  in_app: boolean;
+  email: boolean;
 }
 
 export interface BudgetSummary {
@@ -51,10 +61,18 @@ export interface BudgetCreateInput {
   year: number;
   limit_amount: number;
   apply_to_period?: 'single_month' | 'quarter' | 'half_year' | 'year';
+  has_custom_alerts?: boolean;
+  custom_alert_thresholds?: number[] | null;
+  custom_alert_in_app?: boolean | null;
+  custom_alert_email?: boolean | null;
 }
 
 export interface BudgetUpdateInput {
-  limit_amount: number;
+  limit_amount?: number;
+  has_custom_alerts?: boolean;
+  custom_alert_thresholds?: number[] | null;
+  custom_alert_in_app?: boolean | null;
+  custom_alert_email?: boolean | null;
 }
 
 export interface BudgetQueryParams {
@@ -103,5 +121,15 @@ export const updateBudget = async (budgetId: string, data: BudgetUpdateInput): P
 
 export const deleteBudget = async (budgetId: string): Promise<{ message: string; id: string }> => {
   const res = await api.delete<{ message: string; id: string }>(`/user/budgets/${budgetId}`);
+  return res.data;
+};
+
+export const getBudgetAlertSettings = async (): Promise<BudgetAlertSettings> => {
+  const res = await api.get<BudgetAlertSettings>('/user/budgets/alert-settings');
+  return res.data;
+};
+
+export const updateBudgetAlertSettings = async (data: BudgetAlertSettings): Promise<BudgetAlertSettings> => {
+  const res = await api.put<BudgetAlertSettings>('/user/budgets/alert-settings', data);
   return res.data;
 };

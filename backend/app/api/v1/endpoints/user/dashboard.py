@@ -353,7 +353,7 @@ def get_dashboard_overview(
         savings_change_pct=savings_change_pct,
         financial_health_score=health_data.score,
         financial_health_label=health_data.status_label,
-        has_enough_data=health_data.has_enough_data,
+        has_enough_data=getattr(health_data, 'has_enough_data', health_data.score is not None),
         monthly_trends=monthly_trends,
         expense_breakdown=expense_breakdown,
         income_breakdown=income_breakdown,

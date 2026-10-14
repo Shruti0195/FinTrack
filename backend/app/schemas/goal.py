@@ -24,6 +24,13 @@ class GoalContributionOut(BaseModel):
     class Config:
         from_attributes = True
 
+class GoalAlertSettings(BaseModel):
+    milestone_thresholds: List[int] = Field(default=[25, 50, 75, 100], description="Milestone percentages up to 5, between 1 and 100")
+    deadline_reminder_days: Optional[int] = Field(7, description="Days before deadline: 7, 3, 0 (deadline day), or None")
+    inactivity_nudge_days: Optional[int] = Field(30, description="Days of inactivity before nudge: 14, 30, 60, or None (Off)")
+    in_app: bool = True
+    email: bool = True
+
 class GoalCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100, description="Goal name e.g. New Phone, Goa Trip")
     target_amount: float = Field(..., gt=0, description="Target savings amount in INR")
@@ -31,6 +38,12 @@ class GoalCreate(BaseModel):
     months: Optional[int] = Field(None, ge=1, le=120, description="Optional target duration in months")
     color: Optional[str] = Field("#10B981", max_length=30)
     icon: Optional[str] = Field("target", max_length=50)
+    has_custom_alerts: Optional[bool] = False
+    custom_milestone_thresholds: Optional[List[int]] = None
+    custom_deadline_reminder_days: Optional[int] = None
+    custom_inactivity_nudge_days: Optional[int] = None
+    custom_alert_in_app: Optional[bool] = None
+    custom_alert_email: Optional[bool] = None
 
 class GoalUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -39,6 +52,12 @@ class GoalUpdate(BaseModel):
     color: Optional[str] = Field(None, max_length=30)
     icon: Optional[str] = Field(None, max_length=50)
     status: Optional[str] = Field(None, pattern="^(active|completed)$")
+    has_custom_alerts: Optional[bool] = None
+    custom_milestone_thresholds: Optional[List[int]] = None
+    custom_deadline_reminder_days: Optional[int] = None
+    custom_inactivity_nudge_days: Optional[int] = None
+    custom_alert_in_app: Optional[bool] = None
+    custom_alert_email: Optional[bool] = None
 
 class GoalOut(BaseModel):
     id: uuid.UUID
@@ -55,6 +74,12 @@ class GoalOut(BaseModel):
     icon: str = "target"
     status: str = "active"
     cheering_message: str = ""
+    has_custom_alerts: bool = False
+    custom_milestone_thresholds: Optional[List[int]] = None
+    custom_deadline_reminder_days: Optional[int] = None
+    custom_inactivity_nudge_days: Optional[int] = None
+    custom_alert_in_app: Optional[bool] = None
+    custom_alert_email: Optional[bool] = None
     contributions: List[GoalContributionOut] = []
     created_at: datetime
     updated_at: datetime

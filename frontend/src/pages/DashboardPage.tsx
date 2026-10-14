@@ -12,8 +12,11 @@ import {
   LogOut, 
   Sparkles,
   PlusCircle,
-  BarChart3
+  BarChart3,
+  Sun,
+  Moon
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 import api from '../api/client';
 import { IncomePage } from './IncomePage';
 import { ExpensePage } from './ExpensePage';
@@ -27,10 +30,11 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   deleteNotification,
+  clearAllNotifications,
   type NotificationItem
 } from '../api/notifications';
 import { NotificationsDropdown } from '../components/NotificationsDropdown';
-import { NotificationsPage } from './NotificationsPage';
+import { NotificationDetailModal } from '../components/NotificationDetailModal';
 import { SettingsView } from '../components/SettingsView';
 
 interface DashboardPageProps {
@@ -50,7 +54,6 @@ const VALID_TABS = [
   'transactions',
   'budgets',
   'goals',
-  'notifications',
   'tips',
   'settings',
   'help'
@@ -69,6 +72,7 @@ const getInitialTab = (): string => {
 };
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
+  const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
 
   const setActiveTab = React.useCallback((tab: string) => {
@@ -103,16 +107,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  // Notifications State & Engine Polling
+  // Notifications State & Infinite Scroll
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [loadingMoreNotifs, setLoadingMoreNotifs] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
+  const [hasMoreNotifs, setHasMoreNotifs] = useState(false);
+  
+  // Detail Modal & Undo State
+  const [selectedDetailNotif, setSelectedDetailNotif] = useState<NotificationItem | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [removedNotificationUndo, setRemovedNotificationUndo] = useState<{
+    item: NotificationItem;
+    timerId: any;
+  } | null>(null);
+
   const [highlightedBudgetId, setHighlightedBudgetId] = useState<string | null>(null);
   const [highlightedGoalId, setHighlightedGoalId] = useState<string | null>(null);
 
   const handleNavigateWithHighlight = (tab: string, targetId?: string | null) => {
     let target = tab;
-    if (target === 'reports') target = 'analytics';
+    if (target === 'reports' || target === 'notifications') target = 'analytics';
     const validTab = (target && target !== 'dashboard') ? target : (targetId ? 'budgets' : 'budgets');
     if (validTab === 'budgets') {
       setHighlightedBudgetId(targetId || null);
@@ -122,31 +139,79 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
     setActiveTab(validTab);
   };
 
-  const loadNotifications = React.useCallback(() => {
-    fetchNotifications()
-      .then((data) => {
+  const loadNotifications = React.useCallback(async (offset = 0, isAppend = false) => {
+    if (isAppend) {
+      setLoadingMoreNotifs(true);
+    } else {
+      setLoadingNotifs(true);
+      setNotifError(null);
+    }
+    try {
+      const data = await fetchNotifications(offset, 20);
+      if (isAppend) {
+        setNotifications((prev) => {
+          const existingIds = new Set(prev.map((n) => n.id));
+          const newItems = (data.items || []).filter((n) => !existingIds.has(n.id));
+          return [...prev, ...newItems];
+        });
+      } else {
         setNotifications(data.items || []);
-        setUnreadNotifCount(data.unread_count || 0);
-      })
-      .catch(() => {});
+      }
+      setUnreadNotifCount(data.unread_count || 0);
+      setHasMoreNotifs(Boolean(data.has_more));
+    } catch (err: any) {
+      if (!isAppend) {
+        setNotifError(err.response?.data?.detail || 'Failed to load notifications.');
+      }
+    } finally {
+      setLoadingNotifs(false);
+      setLoadingMoreNotifs(false);
+    }
   }, []);
 
   useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 15000);
+    loadNotifications(0, false);
+    const interval = setInterval(() => {
+      // Periodically refresh initial list without wiping user's scrolled items if dropdown is open
+      fetchNotifications(0, 20)
+        .then((data) => {
+          setUnreadNotifCount(data.unread_count || 0);
+          setNotifications((prev) => {
+            if (prev.length <= 20) return data.items || [];
+            // Preserve deeper scrolled pages
+            const newTopIds = new Set((data.items || []).map(i => i.id));
+            const olderItems = prev.filter(i => !newTopIds.has(i.id));
+            return [...(data.items || []), ...olderItems];
+          });
+        })
+        .catch(() => {});
+    }, 15000);
     return () => clearInterval(interval);
   }, [loadNotifications]);
 
-  const handleMarkNotifRead = async (id: string) => {
-    try {
-      await markNotificationRead(id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-      );
-      setUnreadNotifCount((prev) => Math.max(0, prev - 1));
-    } catch {}
+  const handleLoadMoreNotifs = () => {
+    if (!loadingMoreNotifs && hasMoreNotifs) {
+      loadNotifications(notifications.length, true);
+    }
   };
 
+  // Open detail popup on row click (marks read, never deletes)
+  const handleSelectNotification = async (item: NotificationItem) => {
+    setIsNotifDropdownOpen(false);
+    if (!item.is_read) {
+      try {
+        await markNotificationRead(item.id);
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n))
+        );
+        setUnreadNotifCount((cnt) => Math.max(0, cnt - 1));
+      } catch {}
+    }
+    setSelectedDetailNotif({ ...item, is_read: true });
+    setIsDetailModalOpen(true);
+  };
+
+  // Mark all as read (never deletes)
   const handleMarkAllNotifsRead = async () => {
     try {
       await markAllNotificationsRead();
@@ -155,16 +220,54 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
     } catch {}
   };
 
-  const handleDeleteNotif = async (id: string) => {
+  // Remove notification with 5-second Undo grace period
+  const handleRemoveNotification = (item: NotificationItem) => {
+    // If there is an existing pending deletion, finalize it now
+    if (removedNotificationUndo) {
+      clearTimeout(removedNotificationUndo.timerId);
+      deleteNotification(removedNotificationUndo.item.id).catch(() => {});
+    }
+
+    // Optimistically remove from list
+    setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+    if (!item.is_read) {
+      setUnreadNotifCount((cnt) => Math.max(0, cnt - 1));
+    }
+
+    // Set 5-second undo timer
+    const timerId = setTimeout(() => {
+      deleteNotification(item.id).catch(() => {});
+      setRemovedNotificationUndo((current) => (current?.item.id === item.id ? null : current));
+    }, 5000);
+
+    setRemovedNotificationUndo({ item, timerId });
+  };
+
+  const handleUndoRemoval = () => {
+    if (!removedNotificationUndo) return;
+    clearTimeout(removedNotificationUndo.timerId);
+    const restored = removedNotificationUndo.item;
+    setNotifications((prev) => {
+      const combined = [...prev, restored];
+      return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    });
+    if (!restored.is_read) {
+      setUnreadNotifCount((cnt) => cnt + 1);
+    }
+    setRemovedNotificationUndo(null);
+  };
+
+  // Clear all notifications
+  const handleClearAllNotifs = async () => {
     try {
-      await deleteNotification(id);
-      setNotifications((prev) => {
-        const target = prev.find((n) => n.id === id);
-        if (target && !target.is_read) {
-          setUnreadNotifCount((cnt) => Math.max(0, cnt - 1));
-        }
-        return prev.filter((n) => n.id !== id);
-      });
+      await clearAllNotifications();
+      setNotifications([]);
+      setUnreadNotifCount(0);
+      setHasMoreNotifs(false);
+      if (removedNotificationUndo) {
+        clearTimeout(removedNotificationUndo.timerId);
+        setRemovedNotificationUndo(null);
+      }
     } catch {}
   };
 
@@ -386,42 +489,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('notifications')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: 'var(--radius-btn)',
-                border: 'none',
-                backgroundColor: activeTab === 'notifications' ? 'var(--light-accent)' : 'transparent',
-                color: activeTab === 'notifications' ? 'var(--accent)' : 'var(--secondary-text)',
-                fontWeight: activeTab === 'notifications' ? 600 : 500,
-                fontSize: '14px',
-                cursor: 'pointer',
-                textAlign: 'left'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Bell size={18} />
-                <span>Notifications</span>
-              </div>
-              {unreadNotifCount > 0 && (
-                <span style={{
-                  backgroundColor: 'var(--accent)',
-                  color: '#FFFFFF',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  padding: '2px 7px',
-                  borderRadius: '999px'
-                }}>
-                  {unreadNotifCount}
-                </span>
-              )}
-            </button>
-
-            <button
               onClick={() => setActiveTab('tips')}
               style={{
                 display: 'flex',
@@ -549,6 +616,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 className="theme-toggle-btn"
                 title="Notifications"
                 aria-label="Notifications"
+                aria-haspopup="true"
+                aria-expanded={isNotifDropdownOpen}
                 style={{ position: 'relative' }}
               >
                 <Bell size={18} />
@@ -574,7 +643,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                   pointerEvents: 'none',
                   zIndex: 10
                 }}>
-                  {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                  {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
                 </span>
               )}
 
@@ -583,12 +652,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 onClose={() => setIsNotifDropdownOpen(false)}
                 notifications={notifications}
                 unreadCount={unreadNotifCount}
-                onMarkRead={handleMarkNotifRead}
+                loading={loadingNotifs}
+                loadingMore={loadingMoreNotifs}
+                error={notifError}
+                hasMore={hasMoreNotifs}
+                onLoadMore={handleLoadMoreNotifs}
+                onRetry={() => loadNotifications(0)}
                 onMarkAllRead={handleMarkAllNotifsRead}
-                onNavigateTab={handleNavigateWithHighlight}
-                onViewAll={() => setActiveTab('notifications')}
+                onRemove={handleRemoveNotification}
+                onClearAll={handleClearAllNotifs}
+                onSelectNotification={handleSelectNotification}
               />
             </div>
+
+            {/* Light/Dark Theme Toggle (Next to Bell) */}
+            <button
+              onClick={toggleTheme}
+              className="theme-toggle-btn"
+              title={theme === 'dark' ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={theme === 'dark' ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
 
             {/* User Avatar & Logout */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px' }}>
@@ -681,19 +766,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               onRefreshNotifications={loadNotifications}
             />
           </main>
-        ) : activeTab === 'notifications' ? (
-          <main style={{ width: '100%' }}>
-            <NotificationsPage
-              notifications={notifications}
-              onMarkRead={handleMarkNotifRead}
-              onMarkAllRead={handleMarkAllNotifsRead}
-              onDelete={handleDeleteNotif}
-              onNavigateTab={handleNavigateWithHighlight}
-            />
-          </main>
         ) : activeTab === 'settings' ? (
           <main style={{ width: '100%' }}>
-            <SettingsView initialName={userName} onProfileUpdate={handleProfileUpdate} />
+            <SettingsView initialName={userName} onProfileUpdate={handleProfileUpdate} onNavigateTab={setActiveTab} />
           </main>
         ) : (
           <DashboardView
@@ -785,6 +860,62 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Detail Popup Modal */}
+      <NotificationDetailModal
+        notification={selectedDetailNotif}
+        isOpen={isDetailModalOpen}
+        onClose={() => {
+          setIsDetailModalOpen(false);
+          setSelectedDetailNotif(null);
+        }}
+        onRemove={handleRemoveNotification}
+        onNavigateTab={handleNavigateWithHighlight}
+      />
+
+      {/* Floating Undo Notification Toast (5-second grace period) */}
+      {removedNotificationUndo && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1100,
+            backgroundColor: '#0F172A',
+            color: '#FFFFFF',
+            padding: '12px 20px',
+            borderRadius: '10px',
+            boxShadow: 'var(--shadow-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            fontSize: '13.5px',
+            animation: 'fadeIn 0.2s ease-out',
+            border: '1px solid rgba(255, 255, 255, 0.15)'
+          }}
+        >
+          <span>Notification removed</span>
+          <button
+            onClick={handleUndoRemoval}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--accent)',
+              fontWeight: 700,
+              fontSize: '13.5px',
+              cursor: 'pointer',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              textDecoration: 'underline'
+            }}
+          >
+            Undo
+          </button>
         </div>
       )}
 

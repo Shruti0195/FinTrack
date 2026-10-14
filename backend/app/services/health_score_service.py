@@ -63,6 +63,7 @@ def calculate_financial_health_score(
             status_color="#94A3B8",
             factors_calculated_count=0,
             total_factors_count=4,
+            has_enough_data=False,
             score_notes=[
                 "Add at least 10 entries over 2 different weeks to unlock your Financial Health Score."
             ],
@@ -414,6 +415,7 @@ def calculate_financial_health_score(
         status_color=status_color,
         factors_calculated_count=calculated_count,
         total_factors_count=4,
+        has_enough_data=True,
         score_notes=score_notes[:3],
         improvement_line=improvement_line,
         missing_factor_note=missing_note,

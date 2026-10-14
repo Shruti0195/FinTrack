@@ -20,6 +20,7 @@ class FinancialHealthScoreData(BaseModel):
     status_color: str  # emerald / amber / red / slate
     factors_calculated_count: int
     total_factors_count: int = 4
+    has_enough_data: bool = True
     score_notes: List[str]
     improvement_line: str
     missing_factor_note: Optional[str] = None
