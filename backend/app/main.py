@@ -11,6 +11,7 @@ import app.models.budget
 import app.models.goal
 import app.models.analytics
 import app.models.notification
+import app.models.alert_record
 import app.models.admin
 from sqlalchemy import text
 from app.core.database import engine
@@ -36,6 +37,25 @@ def ensure_columns():
                 """))
             except Exception:
                 pass
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS alert_records (
+                    id UUID PRIMARY KEY,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    alert_type VARCHAR(50) NOT NULL,
+                    budget_id UUID REFERENCES budgets(id) ON DELETE CASCADE,
+                    goal_id UUID REFERENCES goals(id) ON DELETE CASCADE,
+                    threshold INTEGER,
+                    period_identifier VARCHAR(50),
+                    alert_key VARCHAR(160) NOT NULL,
+                    in_app_sent_at TIMESTAMPTZ,
+                    email_sent_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_alert_record_user_key ON alert_records(user_id, alert_key);
+                CREATE INDEX IF NOT EXISTS ix_alert_record_user_type ON alert_records(user_id, alert_type);
+                CREATE INDEX IF NOT EXISTS ix_alert_record_budget ON alert_records(budget_id);
+                CREATE INDEX IF NOT EXISTS ix_alert_record_goal ON alert_records(goal_id);
+            """))
             conn.commit()
     except Exception as e:
         print(f"[DB INIT NOTE] Schema auto-ensure: {e}")

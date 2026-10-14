@@ -19,6 +19,7 @@ from app.schemas.goal import (
     GoalContributionCreate,
     GoalContributionUpdate,
     GoalSummaryOut,
+    GoalAlertSettings,
 )
 
 router = APIRouter()
@@ -91,10 +92,80 @@ def calculate_goal_details(goal: Goal, contributions: List[GoalContribution]) ->
         "icon": goal.icon or "target",
         "status": current_status,
         "cheering_message": cheering_message,
+        "has_custom_alerts": bool(goal.has_custom_alerts),
+        "custom_milestone_thresholds": goal.custom_milestone_thresholds,
+        "custom_deadline_reminder_days": goal.custom_deadline_reminder_days,
+        "custom_inactivity_nudge_days": goal.custom_inactivity_nudge_days,
+        "custom_alert_in_app": goal.custom_alert_in_app,
+        "custom_alert_email": goal.custom_alert_email,
         "contributions": [GoalContributionOut.model_validate(c) for c in sorted_contributions],
         "created_at": goal.created_at,
         "updated_at": goal.updated_at,
     }
+
+
+@router.get("/alert-settings", response_model=GoalAlertSettings)
+def get_user_goal_alert_settings(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get user default goal milestone thresholds, reminders, and delivery channels.
+    """
+    milestones = current_user.goal_milestone_thresholds if current_user.goal_milestone_thresholds is not None else [25, 50, 75, 100]
+    deadline_reminder = current_user.goal_deadline_reminder_days if current_user.goal_deadline_reminder_days is not None else 7
+    inactivity_nudge = current_user.goal_inactivity_nudge_days if current_user.goal_inactivity_nudge_days is not None else 30
+    in_app = current_user.goal_alert_in_app if current_user.goal_alert_in_app is not None else True
+    email = current_user.goal_alert_email if current_user.goal_alert_email is not None else getattr(current_user, 'goal_milestone_notifs', True)
+    return GoalAlertSettings(
+        milestone_thresholds=milestones,
+        deadline_reminder_days=deadline_reminder,
+        inactivity_nudge_days=inactivity_nudge,
+        in_app=in_app,
+        email=email,
+    )
+
+
+@router.put("/alert-settings", response_model=GoalAlertSettings)
+def update_user_goal_alert_settings(
+    settings_in: GoalAlertSettings,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update user default goal milestone thresholds, reminders, and delivery channels.
+    """
+    clean_milestones = sorted(list(set(int(m) for m in settings_in.milestone_thresholds if 1 <= int(m) <= 100)))[:5]
+    if not clean_milestones:
+        clean_milestones = [25, 50, 75, 100]
+
+    current_user.goal_milestone_thresholds = clean_milestones
+    current_user.goal_deadline_reminder_days = settings_in.deadline_reminder_days
+    current_user.goal_inactivity_nudge_days = settings_in.inactivity_nudge_days
+    current_user.goal_alert_in_app = settings_in.in_app
+    current_user.goal_alert_email = settings_in.email
+    current_user.goal_milestone_notifs = settings_in.email
+
+    # Set baseline for all non-custom goals to prevent retroactive alerts
+    user_goals = db.query(Goal).filter(Goal.user_id == current_user.id, Goal.has_custom_alerts == False).all()
+    for g in user_goals:
+        saved = db.query(func.coalesce(func.sum(GoalContribution.amount), 0.0)).filter(
+            GoalContribution.goal_id == g.id
+        ).scalar() or 0.0
+        pct = (float(saved) / float(g.target_amount) * 100.0) if float(g.target_amount) > 0 else 0.0
+        g.alert_baseline_pct = round(pct, 2)
+        db.add(g)
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+
+    return GoalAlertSettings(
+        milestone_thresholds=current_user.goal_milestone_thresholds,
+        deadline_reminder_days=current_user.goal_deadline_reminder_days,
+        inactivity_nudge_days=current_user.goal_inactivity_nudge_days,
+        in_app=current_user.goal_alert_in_app,
+        email=current_user.goal_alert_email,
+    )
 
 
 @router.get("", response_model=List[GoalOut])
@@ -176,7 +247,14 @@ def create_goal(
         deadline=target_deadline,
         color=goal_in.color or "#10B981",
         icon=goal_in.icon or "target",
-        status='active'
+        status='active',
+        has_custom_alerts=bool(goal_in.has_custom_alerts),
+        custom_milestone_thresholds=goal_in.custom_milestone_thresholds,
+        custom_deadline_reminder_days=goal_in.custom_deadline_reminder_days,
+        custom_inactivity_nudge_days=goal_in.custom_inactivity_nudge_days,
+        custom_alert_in_app=goal_in.custom_alert_in_app,
+        custom_alert_email=goal_in.custom_alert_email,
+        alert_baseline_pct=0.0,
     )
     db.add(new_goal)
     db.commit()
@@ -233,18 +311,38 @@ def update_goal(
     if goal_in.status is not None:
         goal.status = goal_in.status
 
+    if goal_in.has_custom_alerts is not None:
+        goal.has_custom_alerts = goal_in.has_custom_alerts
+        if goal_in.has_custom_alerts:
+            if goal_in.custom_milestone_thresholds is not None:
+                goal.custom_milestone_thresholds = sorted(list(set(int(m) for m in goal_in.custom_milestone_thresholds if 1 <= int(m) <= 100)))[:5]
+            if goal_in.custom_deadline_reminder_days is not None:
+                goal.custom_deadline_reminder_days = goal_in.custom_deadline_reminder_days
+            if goal_in.custom_inactivity_nudge_days is not None:
+                goal.custom_inactivity_nudge_days = goal_in.custom_inactivity_nudge_days
+            if goal_in.custom_alert_in_app is not None:
+                goal.custom_alert_in_app = goal_in.custom_alert_in_app
+            if goal_in.custom_alert_email is not None:
+                goal.custom_alert_email = goal_in.custom_alert_email
+        else:
+            goal.custom_milestone_thresholds = None
+            goal.custom_deadline_reminder_days = None
+            goal.custom_inactivity_nudge_days = None
+            goal.custom_alert_in_app = None
+            goal.custom_alert_email = None
+
+    contributions = db.query(GoalContribution).filter(GoalContribution.goal_id == goal.id).all()
+    saved_amount = sum(float(c.amount) for c in contributions)
+    target = float(goal.target_amount)
+    goal.alert_baseline_pct = round((saved_amount / target * 100.0), 2) if target > 0 else 0.0
+
+    # Recalculate auto status
+    if saved_amount >= float(goal.target_amount):
+        goal.status = 'completed'
+
     db.add(goal)
     db.commit()
     db.refresh(goal)
-
-    contributions = db.query(GoalContribution).filter(GoalContribution.goal_id == goal.id).all()
-    
-    # Recalculate auto status
-    saved_amount = sum(float(c.amount) for c in contributions)
-    if saved_amount >= float(goal.target_amount):
-        goal.status = 'completed'
-        db.add(goal)
-        db.commit()
 
     try:
         from app.services.notification_service import evaluate_and_generate_notifications

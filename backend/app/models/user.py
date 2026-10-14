@@ -1,6 +1,6 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import UUID, ENUM, JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -21,6 +21,19 @@ class User(Base):
     email_budget_alerts = Column(Boolean, nullable=False, default=True)
     goal_milestone_notifs = Column(Boolean, nullable=False, default=True)
     monthly_report_notifs = Column(Boolean, nullable=False, default=True)
+
+    # Budget alert defaults
+    budget_alert_thresholds = Column(JSONB, nullable=True, default=[80, 100])
+    budget_alert_in_app = Column(Boolean, nullable=False, default=True)
+    budget_alert_email = Column(Boolean, nullable=False, default=True)
+
+    # Goal alert defaults
+    goal_milestone_thresholds = Column(JSONB, nullable=True, default=[25, 50, 75, 100])
+    goal_deadline_reminder_days = Column(Integer, nullable=True, default=7)
+    goal_inactivity_nudge_days = Column(Integer, nullable=True, default=30)
+    goal_alert_in_app = Column(Boolean, nullable=False, default=True)
+    goal_alert_email = Column(Boolean, nullable=False, default=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

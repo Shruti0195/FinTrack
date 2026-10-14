@@ -24,9 +24,23 @@ export interface Goal {
   icon: string;
   status: 'active' | 'completed';
   cheering_message: string;
+  has_custom_alerts?: boolean;
+  custom_milestone_thresholds?: number[] | null;
+  custom_deadline_reminder_days?: number | null;
+  custom_inactivity_nudge_days?: number | null;
+  custom_alert_in_app?: boolean | null;
+  custom_alert_email?: boolean | null;
   contributions: GoalContribution[];
   created_at: string;
   updated_at: string;
+}
+
+export interface GoalAlertSettings {
+  milestone_thresholds: number[];
+  deadline_reminder_days: number | null;
+  inactivity_nudge_days: number | null;
+  in_app: boolean;
+  email: boolean;
 }
 
 export interface GoalSummary {
@@ -45,6 +59,12 @@ export interface GoalCreateInput {
   months?: number;
   color?: string;
   icon?: string;
+  has_custom_alerts?: boolean;
+  custom_milestone_thresholds?: number[] | null;
+  custom_deadline_reminder_days?: number | null;
+  custom_inactivity_nudge_days?: number | null;
+  custom_alert_in_app?: boolean | null;
+  custom_alert_email?: boolean | null;
 }
 
 export interface GoalUpdateInput {
@@ -54,6 +74,12 @@ export interface GoalUpdateInput {
   color?: string;
   icon?: string;
   status?: 'active' | 'completed';
+  has_custom_alerts?: boolean;
+  custom_milestone_thresholds?: number[] | null;
+  custom_deadline_reminder_days?: number | null;
+  custom_inactivity_nudge_days?: number | null;
+  custom_alert_in_app?: boolean | null;
+  custom_alert_email?: boolean | null;
 }
 
 export interface ContributionCreateInput {
@@ -119,5 +145,15 @@ export const deleteGoalContribution = async (
   contributionId: string
 ): Promise<Goal> => {
   const res = await api.delete<Goal>(`/user/goals/${goalId}/contributions/${contributionId}`);
+  return res.data;
+};
+
+export const getGoalAlertSettings = async (): Promise<GoalAlertSettings> => {
+  const res = await api.get<GoalAlertSettings>('/user/goals/alert-settings');
+  return res.data;
+};
+
+export const updateGoalAlertSettings = async (data: GoalAlertSettings): Promise<GoalAlertSettings> => {
+  const res = await api.put<GoalAlertSettings>('/user/goals/alert-settings', data);
   return res.data;
 };

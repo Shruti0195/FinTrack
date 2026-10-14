@@ -1,6 +1,6 @@
 import uuid
-from sqlalchemy import Column, SmallInteger, Numeric, DateTime, ForeignKey, ForeignKeyConstraint, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy import Column, SmallInteger, Numeric, DateTime, ForeignKey, ForeignKeyConstraint, UniqueConstraint, Boolean
+from sqlalchemy.dialects.postgresql import UUID, ENUM, JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -16,6 +16,14 @@ class Budget(Base):
     month = Column(SmallInteger, nullable=False)
     year = Column(SmallInteger, nullable=False)
     limit_amount = Column(Numeric(12, 2), nullable=False)
+
+    # Custom alert overrides
+    has_custom_alerts = Column(Boolean, nullable=False, default=False)
+    custom_alert_thresholds = Column(JSONB, nullable=True)
+    custom_alert_in_app = Column(Boolean, nullable=True)
+    custom_alert_email = Column(Boolean, nullable=True)
+    alert_baseline_pct = Column(Numeric(6, 2), nullable=True, default=0.0)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

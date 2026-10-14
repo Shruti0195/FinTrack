@@ -1,6 +1,6 @@
 import uuid
-from sqlalchemy import Column, String, Numeric, Date, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy import Column, String, Numeric, Date, DateTime, ForeignKey, Boolean, Integer
+from sqlalchemy.dialects.postgresql import UUID, ENUM, JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -17,6 +17,16 @@ class Goal(Base):
     color = Column(String(30), nullable=True, default='#10B981')
     icon = Column(String(50), nullable=True, default='target')
     status = Column(goal_status_enum, nullable=False, default='active')
+
+    # Custom alert overrides
+    has_custom_alerts = Column(Boolean, nullable=False, default=False)
+    custom_milestone_thresholds = Column(JSONB, nullable=True)
+    custom_deadline_reminder_days = Column(Integer, nullable=True)
+    custom_inactivity_nudge_days = Column(Integer, nullable=True)
+    custom_alert_in_app = Column(Boolean, nullable=True)
+    custom_alert_email = Column(Boolean, nullable=True)
+    alert_baseline_pct = Column(Numeric(6, 2), nullable=True, default=0.0)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

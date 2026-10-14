@@ -49,8 +49,9 @@ class DashboardOverviewResponse(BaseModel):
     savings_change_pct: float
     
     # Financial Health
-    financial_health_score: int
+    financial_health_score: Optional[int] = None
     financial_health_label: str
+    has_enough_data: bool = True
     
     # Month-wise breakdown data
     monthly_trends: List[MonthlyTrendItem]
