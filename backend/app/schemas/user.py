@@ -65,3 +65,14 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+class ChangePasswordResponse(BaseModel):
+    message: str
+    access_token: str
+    token_type: str = "bearer"
+    success: bool = True

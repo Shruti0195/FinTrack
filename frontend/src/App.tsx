@@ -6,6 +6,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsPage } from './pages/TermsPage';
 import { AuthModal } from './components/AuthModal';
 
 function AppContent() {
@@ -13,11 +15,13 @@ function AppContent() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [userLoggedIn, setUserLoggedIn] = useState(() => !!localStorage.getItem('token'));
   
-  const [pageRoute, setPageRoute] = useState<'home' | 'verify-email' | 'reset-password' | 'not-found'>(() => {
+  const [pageRoute, setPageRoute] = useState<'home' | 'verify-email' | 'reset-password' | 'privacy' | 'terms' | 'not-found'>(() => {
     const path = window.location.pathname;
     if (path === '' || path === '/') return 'home';
     if (path.startsWith('/verify-email')) return 'verify-email';
     if (path.startsWith('/reset-password')) return 'reset-password';
+    if (path.startsWith('/privacy')) return 'privacy';
+    if (path.startsWith('/terms')) return 'terms';
     return 'not-found';
   });
 
@@ -27,6 +31,8 @@ function AppContent() {
       if (path === '' || path === '/') setPageRoute('home');
       else if (path.startsWith('/verify-email')) setPageRoute('verify-email');
       else if (path.startsWith('/reset-password')) setPageRoute('reset-password');
+      else if (path.startsWith('/privacy')) setPageRoute('privacy');
+      else if (path.startsWith('/terms')) setPageRoute('terms');
       else setPageRoute('not-found');
     };
     window.addEventListener('popstate', handlePopState);
@@ -79,6 +85,28 @@ function AppContent() {
           window.history.pushState(null, '', '/');
           setPageRoute('home');
           handleOpenAuth(mode);
+        }}
+      />
+    );
+  }
+
+  if (pageRoute === 'privacy') {
+    return (
+      <PrivacyPolicyPage
+        onGoBack={() => {
+          window.history.pushState(null, '', '/');
+          setPageRoute('home');
+        }}
+      />
+    );
+  }
+
+  if (pageRoute === 'terms') {
+    return (
+      <TermsPage
+        onGoBack={() => {
+          window.history.pushState(null, '', '/');
+          setPageRoute('home');
         }}
       />
     );

@@ -13,6 +13,7 @@ import app.models.analytics
 import app.models.notification
 import app.models.alert_record
 import app.models.admin
+import app.models.support_report
 from sqlalchemy import text
 from app.core.database import engine
 
@@ -23,7 +24,12 @@ def ensure_columns():
                 ALTER TABLE users 
                 ADD COLUMN IF NOT EXISTS email_budget_alerts BOOLEAN NOT NULL DEFAULT TRUE,
                 ADD COLUMN IF NOT EXISTS goal_milestone_notifs BOOLEAN NOT NULL DEFAULT TRUE,
-                ADD COLUMN IF NOT EXISTS monthly_report_notifs BOOLEAN NOT NULL DEFAULT TRUE;
+                ADD COLUMN IF NOT EXISTS monthly_report_notifs BOOLEAN NOT NULL DEFAULT TRUE,
+                ADD COLUMN IF NOT EXISTS viewed_analytics BOOLEAN NOT NULL DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS help_checklist_dismissed BOOLEAN NOT NULL DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1,
+                ADD COLUMN IF NOT EXISTS failed_password_attempts INTEGER NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS password_attempt_locked_until TIMESTAMPTZ;
             """))
             conn.execute(text("""
                 ALTER TABLE notifications 
@@ -55,6 +61,21 @@ def ensure_columns():
                 CREATE INDEX IF NOT EXISTS ix_alert_record_user_type ON alert_records(user_id, alert_type);
                 CREATE INDEX IF NOT EXISTS ix_alert_record_budget ON alert_records(budget_id);
                 CREATE INDEX IF NOT EXISTS ix_alert_record_goal ON alert_records(goal_id);
+
+                CREATE TABLE IF NOT EXISTS support_reports (
+                    id UUID PRIMARY KEY,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    report_type VARCHAR(50) NOT NULL,
+                    title VARCHAR(150) NOT NULL,
+                    description TEXT NOT NULL,
+                    page VARCHAR(50),
+                    status VARCHAR(30) NOT NULL DEFAULT 'Open',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS ix_support_reports_user_id ON support_reports(user_id);
+                CREATE INDEX IF NOT EXISTS ix_support_reports_status ON support_reports(status);
+                CREATE INDEX IF NOT EXISTS ix_support_reports_created_at ON support_reports(created_at);
             """))
             conn.commit()
     except Exception as e:

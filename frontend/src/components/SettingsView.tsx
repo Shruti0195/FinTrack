@@ -6,9 +6,12 @@ import {
   Check,
   Save,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Lock,
+  Shield
 } from 'lucide-react';
 import api from '../api/client';
+import { ChangePasswordModal } from './ChangePasswordModal';
 
 export interface UserSettings {
   name: string;
@@ -26,7 +29,6 @@ export interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfileUpdate, onNavigateTab }) => {
-
   const [profile, setProfile] = useState<UserSettings>({
     name: initialName || '',
     email: '',
@@ -39,6 +41,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   useEffect(() => {
     api.get('/user/settings/profile')
@@ -78,7 +81,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
       }));
       setFeedback({ msg: 'Profile and notification settings saved successfully!', type: 'success' });
 
-      // Notify parent component so header, avatar, and greetings update immediately without page refresh
       if (onProfileUpdate) {
         onProfileUpdate({ name: updatedName, email: res.data.email || profile.email });
       }
@@ -98,15 +100,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
   }
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '28px 20px' }}>
+    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
       
       {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
+      <div>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em', margin: 0 }}>
           Settings & Preferences
         </h1>
-        <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', marginTop: '4px' }}>
-          Manage your account profile, notification alerts, and theme preferences.
+        <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', marginTop: '4px', marginBottom: 0 }}>
+          Manage your account profile, notification alerts, and security credentials.
         </p>
       </div>
 
@@ -119,7 +121,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
           color: feedback.type === 'success' ? 'var(--accent)' : 'var(--danger)',
           fontSize: '13.5px',
           fontWeight: 600,
-          marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '8px'
@@ -129,9 +130,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
         </div>
       )}
 
-      <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* GENERAL SETTINGS FORM */}
+      <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
-        {/* 1. PROFILE DETAILS SECTION (At the Top) */}
+        {/* 1. PROFILE DETAILS SECTION */}
         <div className="card-box" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
             <div style={{
@@ -186,7 +188,65 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
           </div>
         </div>
 
-        {/* 2. NOTIFICATIONS SECTION (Second) */}
+        {/* 2. SECURITY SECTION */}
+        <div className="card-box" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--light-accent)',
+                color: 'var(--accent)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Shield size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
+                  Security
+                </h3>
+                <p style={{ fontSize: '12.5px', color: 'var(--secondary-text)', margin: '2px 0 0' }}>
+                  Manage your password and secure your active sessions.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsPasswordModalOpen(true)}
+              className="btn-outline"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '9px 18px',
+                fontSize: '13.5px',
+                fontWeight: 600,
+                borderRadius: 'var(--radius-btn)',
+                cursor: 'pointer',
+                border: '1px solid var(--accent)',
+                color: 'var(--accent)',
+                backgroundColor: 'transparent',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--light-accent)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <Lock size={15} />
+              <span>Change password</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3. NOTIFICATION PREFERENCES SECTION */}
         <div className="card-box" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
             <div style={{
@@ -212,7 +272,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            
             {/* Informational Note for Moved Alert Settings */}
             <div style={{
               padding: '16px 18px',
@@ -285,7 +344,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
               </div>
             </div>
 
-            {/* Monthly Financial Report Notification Switch (Kept Untouched) */}
+            {/* Monthly Financial Report Switch */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -334,23 +393,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
                 </span>
               </label>
             </div>
-
           </div>
         </div>
 
-        {/* Save Button */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+        {/* Save Settings Button */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-4px' }}>
           <button
             type="submit"
             disabled={saving}
             className="btn-primary"
-            style={{ padding: '10px 26px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
+            style={{ padding: '10px 24px', fontSize: '13.5px', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             <Save size={16} />
             <span>{saving ? 'Saving...' : 'Save Settings'}</span>
           </button>
         </div>
       </form>
+
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+        userEmail={profile.email}
+      />
     </div>
   );
 };

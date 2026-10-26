@@ -182,6 +182,9 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
 
     # Update password and mark token used
     user.password_hash = get_password_hash(req.new_password)
+    user.token_version = (getattr(user, 'token_version', 1) or 1) + 1
+    user.failed_password_attempts = 0
+    user.password_attempt_locked_until = None
     reset_record.used = True
     db.add(user)
     db.add(reset_record)
@@ -214,7 +217,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Your account is not active. Please verify your email via the link sent to your inbox before logging in.",
         )
 
-    access_token = create_access_token(subject=str(user.id))
+    access_token = create_access_token(
+        subject=str(user.id),
+        token_version=getattr(user, 'token_version', 1) or 1
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserOut)

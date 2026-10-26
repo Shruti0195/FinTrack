@@ -71,6 +71,15 @@ def get_analytics_overview(
     cur_quarter = quarter or ((today_dt.month - 1) // 3 + 1)
     cur_half = half or (1 if today_dt.month <= 6 else 2)
 
+    # Track viewed analytics for help checklist
+    if not getattr(current_user, 'viewed_analytics', False):
+        try:
+            current_user.viewed_analytics = True
+            db.add(current_user)
+            db.commit()
+        except Exception:
+            pass
+
     # -------------------------------------------------------------
     # 1. Compute Date Range & Period Months
     # -------------------------------------------------------------

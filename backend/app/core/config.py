@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     EMAILS_FROM_NAME: str = "FinTrack Personal Finance"
     FRONTEND_URL: str = "http://localhost:5173"
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
+    SUPPORT_EMAIL: str = "fintrack37@gmail.com"
 
     class Config:
         env_file = ".env"

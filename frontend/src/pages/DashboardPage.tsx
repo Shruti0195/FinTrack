@@ -5,7 +5,6 @@ import {
   Receipt, 
   Target, 
   PieChart, 
-  BookOpen, 
   Settings, 
   HelpCircle, 
   Bell, 
@@ -37,6 +36,9 @@ import { NotificationsDropdown } from '../components/NotificationsDropdown';
 import { NotificationDetailModal } from '../components/NotificationDetailModal';
 import { SettingsView } from '../components/SettingsView';
 import { NotFoundPage } from './NotFoundPage';
+import { HelpPage } from './HelpPage';
+import { PrivacyPolicyPage } from './PrivacyPolicyPage';
+import { TermsPage } from './TermsPage';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -56,9 +58,10 @@ const VALID_TABS = [
   'expenses',
   'budgets',
   'goals',
-  'tips',
   'settings',
-  'help'
+  'help',
+  'privacy',
+  'terms'
 ];
 
 const getInitialTab = (): string => {
@@ -498,28 +501,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               <Target size={18} />
               Goals
             </button>
-
-            <button
-              onClick={() => setActiveTab('tips')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: 'var(--radius-btn)',
-                border: 'none',
-                backgroundColor: activeTab === 'tips' ? 'var(--light-accent)' : 'transparent',
-                color: activeTab === 'tips' ? 'var(--accent)' : 'var(--secondary-text)',
-                fontWeight: activeTab === 'tips' ? 600 : 500,
-                fontSize: '14px',
-                cursor: 'pointer',
-                textAlign: 'left'
-              }}
-            >
-              <BookOpen size={18} />
-              Tips & Articles
-            </button>
           </nav>
         </div>
 
@@ -556,8 +537,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 padding: '9px 12px',
                 borderRadius: 'var(--radius-btn)',
                 border: 'none',
-                background: 'transparent',
-                color: 'var(--secondary-text)',
+                backgroundColor: activeTab === 'help' ? 'var(--light-accent)' : 'transparent',
+                color: activeTab === 'help' ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: activeTab === 'help' ? 600 : 500,
                 fontSize: '13.5px',
                 cursor: 'pointer',
                 textAlign: 'left'
@@ -786,6 +768,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         ) : activeTab === 'settings' ? (
           <main style={{ width: '100%' }}>
             <SettingsView initialName={userName} onProfileUpdate={handleProfileUpdate} onNavigateTab={setActiveTab} />
+          </main>
+        ) : activeTab === 'help' ? (
+          <main style={{ width: '100%' }}>
+            <HelpPage
+              onNavigateTab={setActiveTab}
+              onOpenPrivacy={() => setActiveTab('privacy')}
+              onOpenTerms={() => setActiveTab('terms')}
+            />
+          </main>
+        ) : activeTab === 'privacy' ? (
+          <main style={{ width: '100%' }}>
+            <PrivacyPolicyPage onGoBack={() => setActiveTab('help')} />
+          </main>
+        ) : activeTab === 'terms' ? (
+          <main style={{ width: '100%' }}>
+            <TermsPage onGoBack={() => setActiveTab('help')} />
           </main>
         ) : (
           <DashboardView

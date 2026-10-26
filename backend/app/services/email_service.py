@@ -605,3 +605,234 @@ def send_goal_milestone_email(
         logger.error(f"Failed to send goal milestone email to {email_to}: {str(e)}")
         print(f"[ERROR] Failed to send goal milestone email via Gmail: {str(e)}")
         return False
+
+
+def generate_support_report_email_html(
+    user_name: str,
+    user_email: str,
+    report_type: str,
+    title: str,
+    description: str,
+    page: str = None
+) -> str:
+    page_text = page if page else "Not specified"
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>New FinTrack User Report</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1E293B;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding: 30px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 580px; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;">
+          <tr>
+            <td style="background-color: #0F172A; padding: 20px 28px;">
+              <span style="color: #10B981; font-weight: 700; font-size: 16px;">FinTrack Support</span>
+              <span style="color: #94A3B8; font-size: 14px; margin-left: 8px;">• New User Report</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px;">
+              <div style="display: inline-block; padding: 4px 10px; border-radius: 6px; background-color: #ECFDF5; color: #047857; font-weight: 600; font-size: 12px; margin-bottom: 16px;">
+                {report_type}
+              </div>
+              <h2 style="margin: 0 0 12px; font-size: 20px; color: #0F172A;">{title}</h2>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+                <tr>
+                  <td style="padding: 6px 0; color: #64748B; width: 90px;">From:</td>
+                  <td style="padding: 6px 0; font-weight: 600; color: #1E293B;">{user_name} ({user_email})</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748B;">Page:</td>
+                  <td style="padding: 6px 0; color: #1E293B;">{page_text}</td>
+                </tr>
+              </table>
+              <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: #334155;">
+{description}
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
+
+def send_support_report_email(
+    user_name: str,
+    user_email: str,
+    report_type: str,
+    title: str,
+    description: str,
+    page: str = None
+) -> bool:
+    target_email = settings.SUPPORT_EMAIL or settings.EMAILS_FROM_EMAIL or "fintrack37@gmail.com"
+    subject = f"[FinTrack Support] {report_type}: {title}"
+    plain_text = (
+        f"New Support Report from {user_name} ({user_email}):\n\n"
+        f"Type: {report_type}\n"
+        f"Page: {page or 'Not specified'}\n"
+        f"Title: {title}\n\n"
+        f"Description:\n{description}\n"
+    )
+    html_content = generate_support_report_email_html(
+        user_name=user_name,
+        user_email=user_email,
+        report_type=report_type,
+        title=title,
+        description=description,
+        page=page
+    )
+
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        print("\n" + "=" * 65)
+        print("[DEV MODE: SUPPORT REPORT EMAIL DISPATCH]")
+        print(f"To: {target_email}")
+        print(f"Subject: {subject}")
+        print(f"From: {user_name} <{user_email}>")
+        print(f"Details:\n{plain_text}")
+        print("=" * 65 + "\n")
+        return True
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
+        msg["To"] = target_email
+        msg["Reply-To"] = user_email
+
+        msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+
+        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(settings.SMTP_USER, smtp_password)
+            server.sendmail(settings.SMTP_USER, [target_email], msg.as_string())
+
+        logger.info(f"Support report email sent to {target_email}")
+        print(f"[SUCCESS] Support report email sent to {target_email} via Gmail SMTP.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send support report email: {str(e)}")
+        print(f"[ERROR] Failed to send support report email: {str(e)}")
+        return False
+
+
+def generate_password_changed_email_html(name: str, changed_at_str: str, reset_url: str) -> str:
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Your FinTrack Password Was Changed</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1E293B;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding: 30px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 540px; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;">
+          <tr>
+            <td style="background-color: #0F172A; padding: 22px 28px;">
+              <span style="color: #10B981; font-weight: 700; font-size: 17px;">FinTrack</span>
+              <span style="color: #94A3B8; font-size: 13px; margin-left: 8px;">• Security Alert</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px;">
+              <h2 style="margin: 0 0 14px; font-size: 20px; color: #0F172A;">Your password was changed</h2>
+              <p style="margin: 0 0 14px; font-size: 14.5px; color: #334155;">
+                Hi <b>{name}</b>,
+              </p>
+              <p style="margin: 0 0 16px; font-size: 14.5px; color: #475569; line-height: 1.6;">
+                The password for your FinTrack account was successfully changed on <strong>{changed_at_str}</strong>.
+              </p>
+              <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 13.5px; color: #334155;">
+                🔒 <strong>Device Security Notice:</strong> All other active sessions and browsers have been logged out automatically.
+              </div>
+              <p style="margin: 0 0 20px; font-size: 14px; color: #DC2626; font-weight: 600;">
+                If this wasn't you, reset your password right away to secure your account.
+              </p>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="{reset_url}" target="_blank" style="display: inline-block; padding: 12px 24px; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 8px; background-color: #EF4444;">
+                  Reset Your Password Immediately &rarr;
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 16px 28px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #94A3B8;">
+                &copy; 2026 FinTrack. If you need assistance, contact our support team.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
+
+def send_password_changed_email(
+    user_name: str,
+    user_email: str,
+    changed_at_str: str,
+    reset_url: str
+) -> bool:
+    subject = "FinTrack Security Alert: Your password was changed"
+    plain_text = (
+        f"Hi {user_name},\n\n"
+        f"The password for your FinTrack account was successfully changed on {changed_at_str}.\n"
+        f"All other devices and browsers where you were logged in have been signed out.\n\n"
+        f"If this wasn't you, reset your password right away:\n{reset_url}\n"
+    )
+    html_content = generate_password_changed_email_html(
+        name=user_name,
+        changed_at_str=changed_at_str,
+        reset_url=reset_url
+    )
+
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        print("\n" + "=" * 65)
+        print("[DEV MODE: PASSWORD CHANGED SECURITY ALERT EMAIL]")
+        print(f"To: {user_email}")
+        print(f"Subject: {subject}")
+        print(f"Details:\n{plain_text}")
+        print("=" * 65 + "\n")
+        return True
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
+        msg["To"] = user_email
+
+        msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+
+        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(settings.SMTP_USER, smtp_password)
+            server.sendmail(settings.SMTP_USER, [user_email], msg.as_string())
+
+        logger.info(f"Password changed security email sent to {user_email}")
+        print(f"[SUCCESS] Password changed security email sent to {user_email} via Gmail SMTP.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send password changed email to {user_email}: {str(e)}")
+        print(f"[ERROR] Failed to send password changed email: {str(e)}")
+        return False
+
+

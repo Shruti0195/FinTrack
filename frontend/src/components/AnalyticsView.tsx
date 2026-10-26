@@ -45,10 +45,10 @@ const formatINR = (val: number, compact: boolean = false): string => {
 
 // Single Concise Information Popover Component
 interface FinancialHealthInfoPopoverProps {
-  healthScore: FinancialHealthScoreData;
+  healthScore?: FinancialHealthScoreData;
 }
 
-const FinancialHealthInfoPopover: React.FC<FinancialHealthInfoPopoverProps> = ({ healthScore }) => {
+const FinancialHealthInfoPopover: React.FC<FinancialHealthInfoPopoverProps> = () => {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -120,93 +120,59 @@ const FinancialHealthInfoPopover: React.FC<FinancialHealthInfoPopoverProps> = ({
             position: 'absolute',
             top: 'calc(100% + 10px)',
             left: 0,
-            width: '320px',
+            width: '280px',
             maxWidth: 'calc(100vw - 40px)',
             backgroundColor: 'var(--card)',
             color: 'var(--main-text)',
             borderRadius: '12px',
-            padding: '16px',
+            padding: '14px 16px',
             boxShadow: '0 12px 30px -5px rgba(0, 0, 0, 0.25), 0 8px 12px -6px rgba(0, 0, 0, 0.2)',
             border: '1px solid var(--border)',
             zIndex: 100,
-            fontSize: '12.5px',
+            fontSize: '12px',
             lineHeight: 1.45,
             pointerEvents: 'auto'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--primary)' }}>
-              Score Breakdown
-            </span>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '999px',
-                backgroundColor: `${healthScore.status_color}18`,
-                color: healthScore.status_color
-              }}
-            >
-              {healthScore.score} / 100 • {healthScore.status_label}
-            </span>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--primary)', marginBottom: '4px' }}>
+            How Score is Calculated
           </div>
-
-          <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--secondary-text)' }}>
-            Calculated from your verified entries across 4 key factors:
+          <p style={{ margin: '0 0 10px 0', fontSize: '11.5px', color: 'var(--secondary-text)' }}>
+            Calculated across four key factors (100 pts total):
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {healthScore.factors.map((f, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '9px 12px',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--card-subtle)',
-                  border: '1px solid var(--border)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '12px' }}>
-                    {f.name}
-                  </span>
-                  <span
-                    style={{
-                      fontWeight: 700,
-                      color: f.is_calculated ? 'var(--primary)' : 'var(--secondary-text)',
-                      fontSize: '11.5px'
-                    }}
-                  >
-                    {f.is_calculated ? `${f.earned_points} / ${f.max_points} pts` : 'Excluded'}
-                  </span>
-                </div>
-
-                {/* Rule in Plain Words */}
-                <p style={{ margin: 0, fontSize: '11px', color: 'var(--secondary-text)', lineHeight: 1.4 }}>
-                  {f.rule_explanation}
-                </p>
-
-                {/* User's Own Figures for this period */}
-                <div
-                  style={{
-                    fontSize: '11.5px',
-                    fontWeight: 600,
-                    color: f.is_calculated ? 'var(--primary)' : '#F59E0B',
-                    backgroundColor: 'var(--card)',
-                    padding: '4px 8px',
-                    borderRadius: '5px',
-                    border: '1px solid var(--border)',
-                    marginTop: '2px'
-                  }}
-                >
-                  {f.is_calculated ? f.user_figure_text : f.not_calculated_reason}
-                </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '12px' }}>Savings Rate</div>
+                <div style={{ fontSize: '11px', color: 'var(--secondary-text)', lineHeight: 1.3 }}>Saving 30%+ of income earns full points</div>
               </div>
-            ))}
+              <span style={{ fontWeight: 700, fontSize: '11.5px', color: 'var(--accent)', flexShrink: 0 }}>35 pts</span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '12px' }}>Budget Adherence</div>
+                <div style={{ fontSize: '11px', color: 'var(--secondary-text)', lineHeight: 1.3 }}>Staying within set budget limits</div>
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '11.5px', color: 'var(--accent)', flexShrink: 0 }}>30 pts</span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '12px' }}>Expense Stability</div>
+                <div style={{ fontSize: '11px', color: 'var(--secondary-text)', lineHeight: 1.3 }}>Spending increase &le; 10% vs prior 3-month avg</div>
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '11.5px', color: 'var(--accent)', flexShrink: 0 }}>20 pts</span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '12px' }}>Essential vs Lifestyle</div>
+                <div style={{ fontSize: '11px', color: 'var(--secondary-text)', lineHeight: 1.3 }}>Keeping lifestyle spending &le; 30%</div>
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '11.5px', color: 'var(--accent)', flexShrink: 0 }}>15 pts</span>
+            </div>
           </div>
 
           <div
@@ -214,16 +180,12 @@ const FinancialHealthInfoPopover: React.FC<FinancialHealthInfoPopoverProps> = ({
               marginTop: '10px',
               paddingTop: '8px',
               borderTop: '1px solid var(--border)',
-              fontSize: '11px',
-              color: 'var(--secondary-text)'
+              fontSize: '10.5px',
+              color: 'var(--secondary-text)',
+              lineHeight: 1.35
             }}
           >
-            {healthScore.missing_factor_note && (
-              <div style={{ marginBottom: '4px', color: 'var(--accent)', fontWeight: 600 }}>
-                {healthScore.missing_factor_note}
-              </div>
-            )}
-            Status bands: 80+ Excellent, 60+ Good, 40+ Fair, below 40 Needs attention.
+            Factors without data are left out and the score is scaled to 100.
           </div>
         </div>
       )}

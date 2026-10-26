@@ -32,6 +32,16 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is deactivated. Please contact support.",
         )
+
+    # Invalidate other devices/sessions if password was changed
+    token_version = payload.get("token_version")
+    user_version = getattr(user, 'token_version', 1) or 1
+    if token_version is not None:
+        if token_version != user_version:
+            raise credentials_exception
+    elif user_version > 1:
+        raise credentials_exception
+
     return user
 
 def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
