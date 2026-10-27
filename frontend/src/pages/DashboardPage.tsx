@@ -67,12 +67,14 @@ const VALID_TABS = [
 const getInitialTab = (): string => {
   const hash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
   if (hash) {
+    if (hash === 'reports') return 'analytics';
     if (VALID_TABS.includes(hash)) {
       return hash;
     }
     return 'not-found';
   }
   const saved = localStorage.getItem('fintrack_active_tab')?.toLowerCase();
+  if (saved === 'reports') return 'analytics';
   if (saved && VALID_TABS.includes(saved)) {
     return saved;
   }
@@ -84,7 +86,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   const [activeTab, setActiveTabState] = useState<string>(getInitialTab);
 
   const setActiveTab = React.useCallback((tab: string) => {
-    const targetTab = VALID_TABS.includes(tab) ? tab : 'dashboard';
+    let resolvedTab = tab.toLowerCase();
+    if (resolvedTab === 'reports') resolvedTab = 'analytics';
+    const targetTab = VALID_TABS.includes(resolvedTab) ? resolvedTab : 'dashboard';
     setActiveTabState(targetTab);
     localStorage.setItem('fintrack_active_tab', targetTab);
     if (window.location.hash.replace(/^#\/?/, '') !== targetTab) {
@@ -98,6 +102,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
       const hash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
       if (!hash) {
         setActiveTabState('dashboard');
+        return;
+      }
+      if (hash === 'reports') {
+        setActiveTabState('analytics');
+        localStorage.setItem('fintrack_active_tab', 'analytics');
+        window.history.replaceState(null, '', '#analytics');
         return;
       }
       if (VALID_TABS.includes(hash)) {
@@ -724,6 +734,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               selectedMonth={selectedMonth}
               selectedQuarter={selectedQuarter}
               selectedHalf={selectedHalf}
+              periodLabel={periodLabel}
               onNavigateTab={(tab) => setActiveTab(tab)}
             />
           </main>
@@ -753,6 +764,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               periodType={periodType}
               selectedQuarter={selectedQuarter}
               selectedHalf={selectedHalf}
+              periodLabel={periodLabel}
               highlightedBudgetId={highlightedBudgetId}
               onClearHighlight={() => setHighlightedBudgetId(null)}
             />
@@ -760,6 +772,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         ) : activeTab === 'goals' ? (
           <main style={{ padding: '28px', maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
             <GoalsView
+              periodType={periodType}
+              periodLabel={periodLabel}
               highlightedGoalId={highlightedGoalId}
               onClearHighlight={() => setHighlightedGoalId(null)}
               onRefreshNotifications={loadNotifications}

@@ -105,12 +105,33 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                 if t <= baseline:
                     continue
 
-                if t >= 100:
-                    title = f"{cat_name} Budget Exceeded ({t}%+)"
-                    msg = f"You've exceeded your {cat_name} budget ({round_b_pct}%, ₹{spent:,.0f} of ₹{limit:,.0f}). Adjust your budget or track upcoming expenses."
+                # If budget alerts are paused, suppress notification and email,
+                # but record alert as skipped so it never fires retroactively after resuming.
+                if user.is_budget_alerts_paused(now):
+                    new_rec = AlertRecord(
+                        user_id=user.id,
+                        alert_type='budget_threshold',
+                        budget_id=budget.id,
+                        threshold=t,
+                        period_identifier=period_id,
+                        alert_key=alert_key,
+                        skipped_reason='skipped because paused',
+                        in_app_sent_at=None,
+                        email_sent_at=None
+                    )
+                    db.add(new_rec)
+                    try:
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                    continue
+
+                if round_b_pct >= 100:
+                    title = f"{cat_name} Budget Exceeded ({round_b_pct}%)" if round_b_pct > 100 else f"{cat_name} Budget 100% Reached"
+                    msg = f"You've exceeded your {cat_name} budget ({round_b_pct}%, ₹{spent:,.0f} of ₹{limit:,.0f}). Adjust your budget or track upcoming expenses." if round_b_pct > 100 else f"You've reached 100% of your {cat_name} budget (₹{spent:,.0f} of ₹{limit:,.0f}). Adjust your budget or track upcoming expenses."
                 else:
-                    title = f"{cat_name} Budget {t}% Reached"
-                    msg = f"Your {cat_name} budget is {pct:.0f}% used (₹{spent:,.0f} of ₹{limit:,.0f}) with {days_left} days left in the month."
+                    title = f"{cat_name} Budget {round_b_pct}% Reached"
+                    msg = f"Your {cat_name} budget is {round_b_pct}% used (₹{spent:,.0f} of ₹{limit:,.0f}) with {days_left} days left in the month."
 
                 notif = None
                 in_app_sent_at = None
@@ -166,7 +187,11 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                 except Exception:
                     db.rollback()
             else:
-                # Alert already recorded. Check if email was never sent and is now requested
+                # Alert already recorded. If it was skipped because paused, do not send anything!
+                if getattr(existing_rec, 'skipped_reason', None) == 'skipped because paused':
+                    continue
+
+                # Check if email was never sent and is now requested
                 if send_email and user.email_alerts_enabled and existing_rec.email_sent_at is None:
                     try:
                         email_ok = send_budget_alert_email(
@@ -240,12 +265,33 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                 if m <= baseline:
                     continue
 
-                if m >= 100:
-                    g_msg = f"Congratulations! You've fully achieved your '{goal.title}' savings goal of ₹{target:,.0f}! 🎉"
-                    g_title = "Goal Milestone: 100% Achieved"
+                # If goal alerts are paused, suppress notification and email,
+                # but record alert as skipped so it never fires retroactively after resuming.
+                if user.is_goal_alerts_paused(now):
+                    new_rec = AlertRecord(
+                        user_id=user.id,
+                        alert_type='goal_milestone',
+                        goal_id=goal.id,
+                        threshold=m,
+                        period_identifier='all_time',
+                        alert_key=alert_key,
+                        skipped_reason='skipped because paused',
+                        in_app_sent_at=None,
+                        email_sent_at=None
+                    )
+                    db.add(new_rec)
+                    try:
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                    continue
+
+                if round_pct >= 100:
+                    g_msg = f"Congratulations! You've fully achieved your '{goal.title}' savings goal of ₹{target:,.0f} ({round_pct}%)! 🎉" if round_pct > 100 else f"Congratulations! You've fully achieved your '{goal.title}' savings goal of ₹{target:,.0f}! 🎉"
+                    g_title = f"Goal Milestone: {round_pct}% Achieved" if round_pct > 100 else "Goal Milestone: 100% Achieved"
                 else:
-                    g_msg = f"Great progress! You've reached {m}% (₹{saved:,.0f} of ₹{target:,.0f}) of your '{goal.title}' goal."
-                    g_title = f"Goal Milestone: {m}% Reached"
+                    g_msg = f"Great progress! You've reached {round_pct}% (₹{saved:,.0f} of ₹{target:,.0f}) of your '{goal.title}' goal."
+                    g_title = f"Goal Milestone: {round_pct}% Reached"
 
                 notif = None
                 in_app_sent_at = None
@@ -273,7 +319,7 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                             goal_title=goal.title,
                             saved_amount=saved,
                             target_amount=target,
-                            milestone_pct=m
+                            milestone_pct=round_pct
                         )
                         if email_ok:
                             email_sent_at = datetime.now(timezone.utc)
@@ -299,6 +345,10 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                 except Exception:
                     db.rollback()
             else:
+                # If alert was skipped because paused, do not send anything
+                if getattr(existing_m, 'skipped_reason', None) == 'skipped because paused':
+                    continue
+
                 # Alert already recorded. Check if email was unsent and now enabled
                 if send_email and user.email_alerts_enabled and existing_m.email_sent_at is None:
                     try:
@@ -308,7 +358,7 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                             goal_title=goal.title,
                             saved_amount=saved,
                             target_amount=target,
-                            milestone_pct=m
+                            milestone_pct=round_pct
                         )
                         if email_ok:
                             existing_m.email_sent_at = datetime.now(timezone.utc)
@@ -341,6 +391,24 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                     ).first()
 
                     if not existing_dl:
+                        if user.is_goal_alerts_paused(now):
+                            new_rec = AlertRecord(
+                                user_id=user.id,
+                                alert_type='goal_deadline',
+                                goal_id=goal.id,
+                                threshold=applicable_threshold,
+                                period_identifier=period_id,
+                                alert_key=alert_key,
+                                skipped_reason='skipped because paused',
+                                in_app_sent_at=None
+                            )
+                            db.add(new_rec)
+                            try:
+                                db.commit()
+                            except Exception:
+                                db.rollback()
+                            continue
+
                         rem = max(0.0, target - saved)
                         when_txt = "today" if diff_days == 0 else f"in {diff_days} day{'s' if diff_days != 1 else ''}"
                         title = f"Goal Deadline Today: '{goal.title}'" if diff_days == 0 else f"Deadline Approaching: '{goal.title}'"
@@ -392,6 +460,24 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                 ).first()
 
                 if not existing_inact:
+                    if user.is_goal_alerts_paused(now):
+                        new_rec = AlertRecord(
+                            user_id=user.id,
+                            alert_type='goal_inactivity',
+                            goal_id=goal.id,
+                            threshold=inactivity_days,
+                            period_identifier=period_id,
+                            alert_key=alert_key,
+                            skipped_reason='skipped because paused',
+                            in_app_sent_at=None
+                        )
+                        db.add(new_rec)
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+                        continue
+
                     in_app_sent_at = None
                     if send_in_app:
                         db.add(Notification(

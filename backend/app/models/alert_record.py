@@ -17,6 +17,7 @@ class AlertRecord(Base):
     alert_key = Column(String(160), nullable=False)  # Unique per user: deterministic key
     in_app_sent_at = Column(DateTime(timezone=True), nullable=True)
     email_sent_at = Column(DateTime(timezone=True), nullable=True)
+    skipped_reason = Column(String(100), nullable=True)  # e.g. 'skipped because paused'
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (

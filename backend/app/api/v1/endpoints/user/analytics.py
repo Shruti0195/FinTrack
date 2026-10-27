@@ -1,8 +1,8 @@
 import calendar
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
@@ -20,6 +20,7 @@ from app.schemas.analytics import (
     PeriodComparisonMetric,
 )
 from app.services.health_score_service import calculate_financial_health_score
+from app.services.pdf_report_service import generate_pdf_report
 
 router = APIRouter()
 
@@ -90,16 +91,25 @@ def get_analytics_overview(
         m = cur_month
         y = cur_year
         start_date = date(y, m, 1)
-        last_day = calendar.monthrange(y, m)[1]
-        end_date = date(y, m, last_day)
-        period_label = f"{MONTH_SHORT[m]} {y}"
+        full_last_day = calendar.monthrange(y, m)[1]
+        full_end_date = date(y, m, full_last_day)
         period_months = [(y, m)]
 
         # Previous month
         prev_m = m - 1 if m > 1 else 12
         prev_y = y if m > 1 else y - 1
         prev_start = date(prev_y, prev_m, 1)
-        prev_end = date(prev_y, prev_m, calendar.monthrange(prev_y, prev_m)[1])
+        prev_last_day = calendar.monthrange(prev_y, prev_m)[1]
+
+        if start_date <= today_dt < full_end_date:
+            end_date = today_dt
+            prev_compare_day = min(today_dt.day, prev_last_day)
+            prev_end = date(prev_y, prev_m, prev_compare_day)
+            period_label = f"{MONTH_SHORT[m]} {y}"
+        else:
+            end_date = full_end_date
+            prev_end = date(prev_y, prev_m, prev_last_day)
+            period_label = f"{MONTH_SHORT[m]} {y}"
 
         # Trailing 6 months ending at selected month
         curr_m, curr_y = m, y
@@ -118,7 +128,7 @@ def get_analytics_overview(
         start_m = (q - 1) * 3 + 1
         end_m = start_m + 2
         start_date = date(y, start_m, 1)
-        end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
+        full_end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
         period_label = f"Q{q} {y} ({MONTH_SHORT[start_m]} - {MONTH_SHORT[end_m]})"
         period_months = [(y, mm) for mm in range(start_m, end_m + 1)]
 
@@ -126,9 +136,16 @@ def get_analytics_overview(
         prev_q = q - 1 if q > 1 else 4
         prev_y = y if q > 1 else y - 1
         prev_start_m = (prev_q - 1) * 3 + 1
-        prev_end_m = prev_start_m + 2
         prev_start = date(prev_y, prev_start_m, 1)
-        prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
+
+        if start_date <= today_dt < full_end_date:
+            end_date = today_dt
+            days_elapsed = (today_dt - start_date).days + 1
+            prev_end = prev_start + timedelta(days=days_elapsed - 1)
+        else:
+            end_date = full_end_date
+            prev_end_m = prev_start_m + 2
+            prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
 
         trend_months = [(y, mm) for mm in range(start_m, end_m + 1)]
 
@@ -138,7 +155,7 @@ def get_analytics_overview(
         start_m = 1 if h == 1 else 7
         end_m = 6 if h == 1 else 12
         start_date = date(y, start_m, 1)
-        end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
+        full_end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
         period_label = f"H{h} {y} ({MONTH_SHORT[start_m]} - {MONTH_SHORT[end_m]})"
         period_months = [(y, mm) for mm in range(start_m, end_m + 1)]
 
@@ -146,22 +163,35 @@ def get_analytics_overview(
         prev_h = 2 if h == 1 else 1
         prev_y = y - 1 if h == 1 else y
         prev_start_m = 1 if prev_h == 1 else 7
-        prev_end_m = 6 if prev_h == 1 else 12
         prev_start = date(prev_y, prev_start_m, 1)
-        prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
+
+        if start_date <= today_dt < full_end_date:
+            end_date = today_dt
+            days_elapsed = (today_dt - start_date).days + 1
+            prev_end = prev_start + timedelta(days=days_elapsed - 1)
+        else:
+            end_date = full_end_date
+            prev_end_m = 6 if prev_h == 1 else 12
+            prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
 
         trend_months = [(y, mm) for mm in range(start_m, end_m + 1)]
 
     else:  # 'yearly'
         y = cur_year
         start_date = date(y, 1, 1)
-        end_date = date(y, 12, 31)
+        full_end_date = date(y, 12, 31)
         period_label = f"Year {y}"
         period_months = [(y, mm) for mm in range(1, 13)]
 
         prev_y = y - 1
         prev_start = date(prev_y, 1, 1)
-        prev_end = date(prev_y, 12, 31)
+
+        if y == today_dt.year and today_dt < full_end_date:
+            end_date = today_dt
+            prev_end = date(prev_y, today_dt.month, min(today_dt.day, calendar.monthrange(prev_y, today_dt.month)[1]))
+        else:
+            end_date = full_end_date
+            prev_end = date(prev_y, 12, 31)
 
         trend_months = [(y, mm) for mm in range(1, 13)]
 
@@ -297,13 +327,15 @@ def get_analytics_overview(
     cat_mix_rows = (
         db.query(
             Category.id.label("category_id"),
-            Category.name.label("category_name"),
+            func.coalesce(Category.name, "Uncategorized").label("category_name"),
             func.coalesce(func.sum(Transaction.amount), 0.0).label("amount"),
             func.count(Transaction.id).label("cnt")
         )
-        .join(Transaction, (Transaction.category_id == Category.id) & (Transaction.type == "expense"))
+        .select_from(Transaction)
+        .outerjoin(Category, (Transaction.category_id == Category.id))
         .filter(
             Transaction.user_id == current_user.id,
+            Transaction.type == "expense",
             Transaction.transaction_date >= start_date,
             Transaction.transaction_date <= end_date
         )
@@ -462,3 +494,43 @@ def get_analytics_overview(
         top_5_expenses=top_5_expenses,
         comparison=comparison,
     )
+
+
+@router.get("/report/pdf")
+def download_analytics_pdf_report(
+    period_type: str = Query("monthly", regex="^(monthly|quarterly|half_year|yearly)$"),
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    quarter: Optional[int] = Query(None, ge=1, le=4),
+    half: Optional[int] = Query(None, ge=1, le=2),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generates and streams an on-demand PDF report for the authenticated user and selected period.
+    Nothing is stored on the server.
+    """
+    try:
+        pdf_bytes, filename = generate_pdf_report(
+            db=db,
+            user=current_user,
+            period_type=period_type,
+            year=year,
+            month=month,
+            quarter=quarter,
+            half=half,
+        )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF report: {str(e)}"
+        )
+

@@ -8,6 +8,19 @@ class BudgetAlertSettings(BaseModel):
     in_app: bool = True
     email: bool = True
 
+class BudgetAlertPauseRequest(BaseModel):
+    duration: Literal["1_day", "1_week", "1_month", "indefinite"]
+
+class BudgetAlertStatusResponse(BaseModel):
+    is_paused: bool
+    paused_until: Optional[datetime] = None
+
+class BudgetCardAlertUpdate(BaseModel):
+    thresholds: List[int] = Field(default=[80, 100], description="Alert percentage thresholds, up to 5, between 1 and 150")
+    in_app: bool = True
+    email: bool = True
+    apply_to_all: bool = False
+
 class BudgetBase(BaseModel):
     category_id: UUID
     month: int = Field(..., ge=1, le=12, description="Month (1-12)")

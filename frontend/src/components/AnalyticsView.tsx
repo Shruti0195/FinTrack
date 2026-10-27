@@ -4,19 +4,21 @@ import {
   AlertCircle,
   CheckCircle2,
   PieChart,
-  Calendar,
   Sparkles,
   RefreshCw,
   PlusCircle,
   Receipt,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Download
 } from 'lucide-react';
 import {
   fetchAnalyticsOverview,
+  downloadAnalyticsPdfReport,
   type AnalyticsOverviewResponse,
   type FinancialHealthScoreData
 } from '../api/analytics';
+import { PeriodCapsule } from './PeriodCapsule';
 
 interface AnalyticsViewProps {
   periodType: 'monthly' | 'quarterly' | 'half_year' | 'yearly';
@@ -24,6 +26,7 @@ interface AnalyticsViewProps {
   selectedMonth: number;
   selectedQuarter: number;
   selectedHalf: number;
+  periodLabel?: string;
   onNavigateTab: (tab: string) => void;
 }
 
@@ -199,12 +202,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   selectedMonth,
   selectedQuarter,
   selectedHalf,
+  periodLabel,
   onNavigateTab
 }) => {
   const [data, setData] = useState<AnalyticsOverviewResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [mixTab, setMixTab] = useState<'categories' | 'single_expenses'>('categories');
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -234,6 +240,52 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // PDF Report Download Handler
+  const handleDownloadReport = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    setDownloadError(null);
+
+    try {
+      const params: Record<string, string | number> = {
+        period_type: periodType,
+        year: selectedYear,
+      };
+      if (periodType === 'monthly') params.month = selectedMonth;
+      if (periodType === 'quarterly') params.quarter = selectedQuarter;
+      if (periodType === 'half_year') params.half = selectedHalf;
+
+      const { blob, filename } = await downloadAnalyticsPdfReport(params as any);
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err: any) {
+      console.error('Failed to download report:', err);
+      let message = 'Failed to prepare your report. Please retry.';
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const parsed = JSON.parse(text);
+          if (parsed.detail) message = parsed.detail;
+        } catch {
+          // Keep default message if text parsing fails
+        }
+      } else if (err.response?.data?.detail) {
+        message = err.response.data.detail;
+      } else if (err.message) {
+        message = err.message;
+      }
+      setDownloadError(message);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Loading State
   if (loading) {
@@ -408,22 +460,115 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               Category allocations, period performance, and Financial Health Score for {data.period_label}.
             </p>
           </div>
-          <div
-            style={{
-              padding: '6px 14px',
-              borderRadius: '999px',
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-              fontSize: '12.5px',
-              fontWeight: 600,
-              color: 'var(--secondary-text)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Calendar size={14} color="var(--accent)" />
-            <span>{data.period_label}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <PeriodCapsule
+                periodType={periodType}
+                periodLabel={data.period_label || periodLabel || ''}
+              />
+
+              {(() => {
+                const totalIncomeVal = data.comparison?.find(c => c.key === 'income')?.current_value || 0;
+                const totalExpensesVal = data.comparison?.find(c => c.key === 'expenses')?.current_value || 0;
+                const hasEntriesInPeriod = totalIncomeVal > 0 || totalExpensesVal > 0;
+
+                return (
+                  <button
+                    type="button"
+                    onClick={handleDownloadReport}
+                    disabled={isDownloading || !hasEntriesInPeriod}
+                    title={!hasEntriesInPeriod ? "Add entries for this period to download a report." : "Download PDF financial report"}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      cursor: !hasEntriesInPeriod || isDownloading ? 'not-allowed' : 'pointer',
+                      opacity: !hasEntriesInPeriod ? 0.6 : 1,
+                      whiteSpace: 'nowrap',
+                      height: '38px',
+                      backgroundColor: !hasEntriesInPeriod ? 'var(--card-subtle)' : 'var(--card)',
+                      color: !hasEntriesInPeriod ? 'var(--secondary-text)' : 'var(--primary)',
+                      border: '1px solid var(--border)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (hasEntriesInPeriod && !isDownloading) {
+                        e.currentTarget.style.backgroundColor = 'var(--card-subtle)';
+                        e.currentTarget.style.borderColor = 'var(--accent)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (hasEntriesInPeriod && !isDownloading) {
+                        e.currentTarget.style.backgroundColor = 'var(--card)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                      }
+                    }}
+                  >
+                    {isDownloading ? (
+                      <>
+                        <RefreshCw size={15} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                        <span>Preparing your report...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={15} style={{ color: 'var(--accent)' }} />
+                        <span>Download report (PDF)</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
+            </div>
+
+            {(() => {
+              const totalIncomeVal = data.comparison?.find(c => c.key === 'income')?.current_value || 0;
+              const totalExpensesVal = data.comparison?.find(c => c.key === 'expenses')?.current_value || 0;
+              const hasEntriesInPeriod = totalIncomeVal > 0 || totalExpensesVal > 0;
+              if (!hasEntriesInPeriod) {
+                return (
+                  <span style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>
+                    Add entries for this period to download a report.
+                  </span>
+                );
+              }
+              return null;
+            })()}
+
+            {downloadError && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  color: 'var(--danger)',
+                  marginTop: '2px',
+                }}
+              >
+                <AlertCircle size={13} />
+                <span>{downloadError}</span>
+                <button
+                  type="button"
+                  onClick={handleDownloadReport}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent)',
+                    fontWeight: 600,
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    padding: 0
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

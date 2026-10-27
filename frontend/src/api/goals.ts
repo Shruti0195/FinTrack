@@ -157,3 +157,40 @@ export const updateGoalAlertSettings = async (data: GoalAlertSettings): Promise<
   const res = await api.put<GoalAlertSettings>('/user/goals/alert-settings', data);
   return res.data;
 };
+
+export interface GoalAlertPauseStatus {
+  is_paused: boolean;
+  paused_until?: string | null;
+}
+
+export const getGoalAlertPauseStatus = async (): Promise<GoalAlertPauseStatus> => {
+  const res = await api.get<GoalAlertPauseStatus>('/user/goals/alerts/status');
+  return res.data;
+};
+
+export const pauseGoalAlerts = async (
+  duration: '1_day' | '1_week' | '1_month' | 'indefinite'
+): Promise<GoalAlertPauseStatus> => {
+  const res = await api.post<GoalAlertPauseStatus>('/user/goals/alerts/pause', { duration });
+  return res.data;
+};
+
+export const resumeGoalAlerts = async (): Promise<GoalAlertPauseStatus> => {
+  const res = await api.post<GoalAlertPauseStatus>('/user/goals/alerts/resume');
+  return res.data;
+};
+
+export const updateGoalCardAlerts = async (
+  goalId: string,
+  data: {
+    milestone_thresholds: number[];
+    deadline_reminder_days: number | null;
+    inactivity_nudge_days: number | null;
+    in_app: boolean;
+    email: boolean;
+    apply_to_all?: boolean;
+  }
+): Promise<Goal> => {
+  const res = await api.put<Goal>(`/user/goals/${goalId}/alerts`, data);
+  return res.data;
+};

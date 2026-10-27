@@ -1,5 +1,5 @@
 import calendar
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, desc, extract
@@ -42,8 +42,8 @@ PALETTE_COLORS = [
 
 
 def _calc_pct_change(curr: float, prev: float) -> float:
-    if prev > 0:
-        return round(((curr - prev) / prev) * 100, 1)
+    if prev != 0:
+        return round(((curr - prev) / abs(prev)) * 100, 1)
     elif curr > 0:
         return 100.0
     return 0.0
@@ -81,8 +81,8 @@ def get_dashboard_overview(
         m = cur_month
         y = cur_year
         start_date = date(y, m, 1)
-        last_day = calendar.monthrange(y, m)[1]
-        end_date = date(y, m, last_day)
+        full_last_day = calendar.monthrange(y, m)[1]
+        full_end_date = date(y, m, full_last_day)
         period_label = f"{MONTH_SHORT[m]} {y}"
         period_months = [(y, m)]
 
@@ -90,7 +90,15 @@ def get_dashboard_overview(
         prev_m = m - 1 if m > 1 else 12
         prev_y = y if m > 1 else y - 1
         prev_start = date(prev_y, prev_m, 1)
-        prev_end = date(prev_y, prev_m, calendar.monthrange(prev_y, prev_m)[1])
+        prev_last_day = calendar.monthrange(prev_y, prev_m)[1]
+
+        if start_date <= today_dt < full_end_date:
+            end_date = today_dt
+            prev_compare_day = min(today_dt.day, prev_last_day)
+            prev_end = date(prev_y, prev_m, prev_compare_day)
+        else:
+            end_date = full_end_date
+            prev_end = date(prev_y, prev_m, prev_last_day)
 
         # Trailing 6 months ending at selected month for month-wise trend
         curr_m, curr_y = m, y
@@ -109,7 +117,7 @@ def get_dashboard_overview(
         start_m = (q - 1) * 3 + 1
         end_m = start_m + 2
         start_date = date(y, start_m, 1)
-        end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
+        full_end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
         period_label = f"Q{q} {y} ({MONTH_SHORT[start_m]} - {MONTH_SHORT[end_m]})"
         period_months = [(y, mm) for mm in range(start_m, end_m + 1)]
 
@@ -117,9 +125,16 @@ def get_dashboard_overview(
         prev_q = q - 1 if q > 1 else 4
         prev_y = y if q > 1 else y - 1
         prev_start_m = (prev_q - 1) * 3 + 1
-        prev_end_m = prev_start_m + 2
         prev_start = date(prev_y, prev_start_m, 1)
-        prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
+
+        if start_date <= today_dt < full_end_date:
+            end_date = today_dt
+            days_elapsed = (today_dt - start_date).days + 1
+            prev_end = prev_start + timedelta(days=days_elapsed - 1)
+        else:
+            end_date = full_end_date
+            prev_end_m = prev_start_m + 2
+            prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
 
         # All 3 months in this quarter
         trend_months = [(y, mm) for mm in range(start_m, end_m + 1)]
@@ -130,7 +145,7 @@ def get_dashboard_overview(
         start_m = 1 if h == 1 else 7
         end_m = 6 if h == 1 else 12
         start_date = date(y, start_m, 1)
-        end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
+        full_end_date = date(y, end_m, calendar.monthrange(y, end_m)[1])
         period_label = f"H{h} {y} ({MONTH_SHORT[start_m]} - {MONTH_SHORT[end_m]})"
         period_months = [(y, mm) for mm in range(start_m, end_m + 1)]
 
@@ -138,9 +153,16 @@ def get_dashboard_overview(
         prev_h = 2 if h == 1 else 1
         prev_y = y - 1 if h == 1 else y
         prev_start_m = 1 if prev_h == 1 else 7
-        prev_end_m = 6 if prev_h == 1 else 12
         prev_start = date(prev_y, prev_start_m, 1)
-        prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
+
+        if start_date <= today_dt < full_end_date:
+            end_date = today_dt
+            days_elapsed = (today_dt - start_date).days + 1
+            prev_end = prev_start + timedelta(days=days_elapsed - 1)
+        else:
+            end_date = full_end_date
+            prev_end_m = 6 if prev_h == 1 else 12
+            prev_end = date(prev_y, prev_end_m, calendar.monthrange(prev_y, prev_end_m)[1])
 
         # All 6 months in this half
         trend_months = [(y, mm) for mm in range(start_m, end_m + 1)]
@@ -148,13 +170,19 @@ def get_dashboard_overview(
     else:  # 'yearly'
         y = cur_year
         start_date = date(y, 1, 1)
-        end_date = date(y, 12, 31)
+        full_end_date = date(y, 12, 31)
         period_label = f"Year {y}"
         period_months = [(y, mm) for mm in range(1, 13)]
 
         prev_y = y - 1
         prev_start = date(prev_y, 1, 1)
-        prev_end = date(prev_y, 12, 31)
+
+        if y == today_dt.year and today_dt < full_end_date:
+            end_date = today_dt
+            prev_end = date(prev_y, today_dt.month, min(today_dt.day, calendar.monthrange(prev_y, today_dt.month)[1]))
+        else:
+            end_date = full_end_date
+            prev_end = date(prev_y, 12, 31)
 
         # All 12 months
         trend_months = [(y, mm) for mm in range(1, 13)]
@@ -237,13 +265,11 @@ def get_dashboard_overview(
     cat_exp_rows = (
         db.query(
             Category.id.label("category_id"),
-            Category.name.label("category_name"),
+            func.coalesce(Category.name, "Uncategorized").label("category_name"),
             func.coalesce(func.sum(Transaction.amount), 0.0).label("amount"),
         )
-        .join(
-            Transaction,
-            (Transaction.category_id == Category.id) & (Transaction.type == Category.type)
-        )
+        .select_from(Transaction)
+        .outerjoin(Category, (Transaction.category_id == Category.id))
         .filter(
             Transaction.user_id == current_user.id,
             Transaction.type == "expense",
@@ -261,7 +287,7 @@ def get_dashboard_overview(
         pct = round((amt / total_expenses * 100), 1) if total_expenses > 0 else 0.0
         expense_breakdown.append(
             CategoryBreakdownItem(
-                category_id=str(row.category_id),
+                category_id=str(row.category_id) if row.category_id else None,
                 category_name=row.category_name,
                 type="expense",
                 amount=amt,
@@ -274,13 +300,11 @@ def get_dashboard_overview(
     cat_inc_rows = (
         db.query(
             Category.id.label("category_id"),
-            Category.name.label("category_name"),
+            func.coalesce(Category.name, "Other Income").label("category_name"),
             func.coalesce(func.sum(Transaction.amount), 0.0).label("amount"),
         )
-        .join(
-            Transaction,
-            (Transaction.category_id == Category.id) & (Transaction.type == Category.type)
-        )
+        .select_from(Transaction)
+        .outerjoin(Category, (Transaction.category_id == Category.id))
         .filter(
             Transaction.user_id == current_user.id,
             Transaction.type == "income",
@@ -298,7 +322,7 @@ def get_dashboard_overview(
         pct = round((amt / total_income * 100), 1) if total_income > 0 else 0.0
         income_breakdown.append(
             CategoryBreakdownItem(
-                category_id=str(row.category_id),
+                category_id=str(row.category_id) if row.category_id else None,
                 category_name=row.category_name,
                 type="income",
                 amount=amt,

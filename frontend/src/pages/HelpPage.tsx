@@ -2,26 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { 
   HelpCircle, 
   CheckCircle2, 
-  Circle, 
-  ChevronDown, 
-  ChevronUp, 
   Send, 
-  AlertCircle, 
-  Sparkles, 
-  ArrowRight, 
-  RefreshCw,
-  XCircle,
-  Inbox
+  RefreshCw, 
+  XCircle, 
+  Inbox 
 } from 'lucide-react';
 import { 
-  fetchChecklistStatus, 
-  dismissChecklist, 
   fetchSupportReports, 
   createSupportReport, 
-  type ChecklistStatus, 
   type SupportReportItem, 
   type ReportType 
 } from '../api/help';
+import { GettingStartedChecklist } from '../components/GettingStartedChecklist';
 
 interface HelpPageProps {
   onNavigateTab: (tab: string) => void;
@@ -29,73 +21,11 @@ interface HelpPageProps {
   onOpenTerms?: () => void;
 }
 
-interface FaqItem {
-  id: string;
-  question: string;
-  answer: string;
-  actionButtons?: Array<{
-    label: string;
-    tab: string;
-  }>;
-}
-
-const FAQS: FaqItem[] = [
-  {
-    id: 'health-score',
-    question: 'How is my Financial Health Score calculated?',
-    answer: "Four factors determine your score: savings rate (35 pts), budget adherence (30 pts), expense stability (20 pts), and essential versus non-essential spending (15 pts). Factors that cannot be calculated yet are omitted and the total is scaled to 100. You can review your detailed score breakdown and insights anytime in Analytics.",
-    actionButtons: [
-      { label: 'Go to Analytics', tab: 'analytics' }
-    ]
-  },
-  {
-    id: 'alerts',
-    question: 'How do I change when I get budget or goal alerts?',
-    answer: "Budget alerts are set on the Budgets page and goal alerts on the Goals page, under Alert settings. You can pick your percentage thresholds, toggle in-app and email alerts, and set custom overrides for individual budgets or goals.",
-    actionButtons: [
-      { label: 'Go to Budgets', tab: 'budgets' },
-      { label: 'Go to Goals', tab: 'goals' }
-    ]
-  },
-  {
-    id: 'period-selector',
-    question: 'How do I switch between monthly, quarterly, half-yearly and yearly views?',
-    answer: "Use the date selector in the top bar. You can toggle between Monthly, Quarterly, Half-Year, or Yearly views, and select specific months or years to see your historical finances."
-  },
-  {
-    id: 'csv-export',
-    question: 'How do I download my income or expense list?',
-    answer: "Use the Export CSV button on the Income and Expenses pages. It downloads exactly what you're currently viewing, including all active period selections and category filters."
-  },
-  {
-    id: 'change-password',
-    question: 'How do I change my password?',
-    answer: "In Settings. Navigate to your Settings page to manage your profile and security credentials.",
-    actionButtons: [
-      { label: 'Go to Settings', tab: 'settings' }
-    ]
-  },
-  {
-    id: 'privacy-data',
-    question: 'Who can see my data?',
-    answer: "Only you. The people who run FinTrack can see overall counts, such as how many people use the app, but never your entries, budgets or goals."
-  }
-];
-
 export const HelpPage: React.FC<HelpPageProps> = ({
   onNavigateTab,
   onOpenPrivacy,
   onOpenTerms
 }) => {
-  // Checklist State
-  const [checklist, setChecklist] = useState<ChecklistStatus | null>(null);
-  const [loadingChecklist, setLoadingChecklist] = useState(true);
-  const [checklistError, setChecklistError] = useState<string | null>(null);
-  const [isDismissingChecklist, setIsDismissingChecklist] = useState(false);
-
-  // FAQ State (only one open at a time)
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
-
   // Support Form State
   const [reportType, setReportType] = useState<ReportType>('Something is broken');
   const [reportTitle, setReportTitle] = useState('');
@@ -110,20 +40,6 @@ export const HelpPage: React.FC<HelpPageProps> = ({
   const [reports, setReports] = useState<SupportReportItem[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
-
-  // Load Checklist
-  const loadChecklist = async () => {
-    try {
-      setLoadingChecklist(true);
-      setChecklistError(null);
-      const data = await fetchChecklistStatus();
-      setChecklist(data);
-    } catch (err: any) {
-      setChecklistError('Failed to load checklist. Please retry.');
-    } finally {
-      setLoadingChecklist(false);
-    }
-  };
 
   // Load Reports
   const loadReports = async () => {
@@ -140,35 +56,8 @@ export const HelpPage: React.FC<HelpPageProps> = ({
   };
 
   useEffect(() => {
-    loadChecklist();
     loadReports();
   }, []);
-
-  // Dismiss Checklist
-  const handleDismissChecklist = async () => {
-    try {
-      setIsDismissingChecklist(true);
-      await dismissChecklist();
-      setChecklist(prev => prev ? { ...prev, is_dismissed: true } : null);
-    } catch (err) {
-      // Fallback local dismiss
-      setChecklist(prev => prev ? { ...prev, is_dismissed: true } : null);
-    } finally {
-      setIsDismissingChecklist(false);
-    }
-  };
-
-  // FAQ Accordion Keyboard & Click Handler
-  const toggleFaq = (index: number) => {
-    setOpenFaqIndex(prev => (prev === index ? null : index));
-  };
-
-  const handleFaqKeyDown = (e: React.KeyboardEvent, index: number) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      toggleFaq(index);
-    }
-  };
 
   // Submit Support Report
   const handleSubmitReport = async (e: React.FormEvent) => {
@@ -218,53 +107,6 @@ export const HelpPage: React.FC<HelpPageProps> = ({
     }
   };
 
-  const steps = [
-    {
-      id: 'income',
-      title: 'Add your first income',
-      desc: 'Log a salary or inflow to track where your money starts.',
-      isDone: checklist?.has_income ?? false,
-      tab: 'income',
-      btnText: 'Go to Income'
-    },
-    {
-      id: 'expense',
-      title: 'Add your first expense',
-      desc: 'Record a spending entry to monitor your category outflows.',
-      isDone: checklist?.has_expense ?? false,
-      tab: 'expenses',
-      btnText: 'Go to Expenses'
-    },
-    {
-      id: 'budget',
-      title: 'Set a budget',
-      desc: 'Set category spending limits to keep your expenses in check.',
-      isDone: checklist?.has_budget ?? false,
-      tab: 'budgets',
-      btnText: 'Go to Budgets'
-    },
-    {
-      id: 'goal',
-      title: 'Create a goal',
-      desc: 'Define a savings milestone to build discipline and momentum.',
-      isDone: checklist?.has_goal ?? false,
-      tab: 'goals',
-      btnText: 'Go to Goals'
-    },
-    {
-      id: 'analytics',
-      title: 'Look at Analytics',
-      desc: 'Inspect your Financial Health Score, savings rate, and mix.',
-      isDone: checklist?.has_viewed_analytics ?? false,
-      tab: 'analytics',
-      btnText: 'Go to Analytics'
-    }
-  ];
-
-  const completedCount = checklist?.completed_count ?? 0;
-  const isAllDone = checklist?.all_completed ?? false;
-  const isDismissed = checklist?.is_dismissed ?? false;
-
   return (
     <div style={{
       maxWidth: '960px',
@@ -311,312 +153,11 @@ export const HelpPage: React.FC<HelpPageProps> = ({
       </div>
 
       {/* 1. GETTING STARTED CHECKLIST */}
-      {!isDismissed && (
-        <section className="card-box" style={{
-          backgroundColor: 'var(--card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-card)',
-          padding: '24px 28px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '16px',
-            flexWrap: 'wrap',
-            gap: '12px'
-          }}>
-            <div>
-              <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)', margin: '0 0 4px' }}>
-                Getting started checklist
-              </h2>
-              <div style={{ fontSize: '13.5px', color: 'var(--secondary-text)' }}>
-                {loadingChecklist ? (
-                  <span>Checking your progress...</span>
-                ) : (
-                  <span>{completedCount} of 5 done</span>
-                )}
-              </div>
-            </div>
+      <GettingStartedChecklist onNavigateTab={onNavigateTab} />
 
-            {/* Progress Bar */}
-            <div style={{
-              width: '180px',
-              height: '8px',
-              backgroundColor: 'var(--card-subtle)',
-              borderRadius: '999px',
-              overflow: 'hidden',
-              border: '1px solid var(--border)'
-            }}>
-              <div style={{
-                height: '100%',
-                width: `${(completedCount / 5) * 100}%`,
-                backgroundColor: 'var(--accent)',
-                transition: 'width 0.3s ease'
-              }} />
-            </div>
-          </div>
 
-          {loadingChecklist ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--secondary-text)', fontSize: '14px' }}>
-              Loading your setup checklist...
-            </div>
-          ) : checklistError ? (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              backgroundColor: 'var(--card-subtle)',
-              borderRadius: '8px',
-              border: '1px solid var(--border)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#EF4444', fontSize: '13.5px' }}>
-                <AlertCircle size={16} />
-                <span>{checklistError}</span>
-              </div>
-              <button
-                onClick={loadChecklist}
-                className="btn-outline"
-                style={{ padding: '6px 12px', fontSize: '12.5px', borderRadius: '6px', cursor: 'pointer' }}
-              >
-                Retry
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* All Completed Congratulation Banner */}
-              {isAllDone && (
-                <div style={{
-                  backgroundColor: 'var(--light-accent)',
-                  border: '1px solid var(--accent)',
-                  borderRadius: '10px',
-                  padding: '16px 20px',
-                  marginBottom: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '12px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Sparkles size={20} color="var(--accent)" />
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--primary)' }}>
-                        All 5 steps completed!
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'var(--secondary-text)' }}>
-                        You're all set up to make smart financial decisions.
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleDismissChecklist}
-                    disabled={isDismissingChecklist}
-                    className="btn-primary"
-                    style={{
-                      padding: '8px 16px',
-                      fontSize: '13px',
-                      borderRadius: 'var(--radius-btn)',
-                      cursor: 'pointer',
-                      backgroundColor: 'var(--accent)',
-                      color: '#FFFFFF'
-                    }}
-                  >
-                    {isDismissingChecklist ? 'Dismissing...' : 'Dismiss Checklist'}
-                  </button>
-                </div>
-              )}
 
-              {/* Steps List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {steps.map((step) => (
-                  <div
-                    key={step.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      borderRadius: '8px',
-                      backgroundColor: step.isDone ? 'var(--card-subtle)' : 'var(--card)',
-                      border: '1px solid var(--border)',
-                      gap: '12px',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
-                      {step.isDone ? (
-                        <CheckCircle2 size={20} color="var(--accent)" style={{ flexShrink: 0 }} />
-                      ) : (
-                        <Circle size={20} color="var(--secondary-text)" style={{ flexShrink: 0 }} />
-                      )}
-                      <div>
-                        <div style={{
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          color: step.isDone ? 'var(--secondary-text)' : 'var(--primary)',
-                          textDecoration: step.isDone ? 'line-through' : 'none'
-                        }}>
-                          {step.title}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>
-                          {step.desc}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      {step.isDone ? (
-                        <span style={{
-                          fontSize: '12px',
-                          color: 'var(--accent)',
-                          fontWeight: 600,
-                          backgroundColor: 'var(--light-accent)',
-                          padding: '4px 10px',
-                          borderRadius: '12px'
-                        }}>
-                          Completed
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => onNavigateTab(step.tab)}
-                          className="btn-outline"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 14px',
-                            fontSize: '12.5px',
-                            fontWeight: 600,
-                            borderRadius: 'var(--radius-btn)',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <span>{step.btnText}</span>
-                          <ArrowRight size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
-      )}
-
-      {/* 2. FREQUENTLY ASKED QUESTIONS */}
-      <section className="card-box" style={{
-        backgroundColor: 'var(--card)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-card)',
-        padding: '24px 28px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-      }}>
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)', margin: '0 0 4px' }}>
-            Frequently asked questions
-          </h2>
-          <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', margin: 0 }}>
-            Quick answers to help you navigate and understand FinTrack.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {FAQS.map((faq, index) => {
-            const isOpen = openFaqIndex === index;
-            return (
-              <div
-                key={faq.id}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--card-subtle)',
-                  overflow: 'hidden',
-                  transition: 'border-color 0.15s ease'
-                }}
-              >
-                <button
-                  type="button"
-                  id={`faq-btn-${index}`}
-                  aria-expanded={isOpen}
-                  aria-controls={`faq-answer-${index}`}
-                  onClick={() => toggleFaq(index)}
-                  onKeyDown={(e) => handleFaqKeyDown(e, index)}
-                  style={{
-                    width: '100%',
-                    padding: '14px 18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    color: 'var(--primary)',
-                    fontSize: '14.5px',
-                    fontWeight: 600
-                  }}
-                >
-                  <span>{faq.question}</span>
-                  <div style={{ color: 'var(--secondary-text)', flexShrink: 0 }}>
-                    {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </div>
-                </button>
-
-                {isOpen && (
-                  <div
-                    id={`faq-answer-${index}`}
-                    role="region"
-                    aria-labelledby={`faq-btn-${index}`}
-                    style={{
-                      padding: '0 18px 16px',
-                      color: 'var(--secondary-text)',
-                      fontSize: '14px',
-                      lineHeight: 1.6,
-                      borderTop: '1px solid var(--border)'
-                    }}
-                  >
-                    <p style={{ marginTop: '12px', marginBottom: faq.actionButtons ? '14px' : '0' }}>
-                      {faq.answer}
-                    </p>
-
-                    {faq.actionButtons && (
-                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                        {faq.actionButtons.map((btn, bIdx) => (
-                          <button
-                            key={bIdx}
-                            onClick={() => onNavigateTab(btn.tab)}
-                            className="btn-outline"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 14px',
-                              fontSize: '12.5px',
-                              fontWeight: 600,
-                              borderRadius: 'var(--radius-btn)',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <span>{btn.label}</span>
-                            <ArrowRight size={13} />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* 3. REPORT A PROBLEM OR SUGGEST SOMETHING */}
+      {/* 2. REPORT A PROBLEM OR SUGGEST SOMETHING */}
       <section className="card-box" style={{
         backgroundColor: 'var(--card)',
         border: '1px solid var(--border)',

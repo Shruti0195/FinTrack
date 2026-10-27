@@ -133,3 +133,38 @@ export const updateBudgetAlertSettings = async (data: BudgetAlertSettings): Prom
   const res = await api.put<BudgetAlertSettings>('/user/budgets/alert-settings', data);
   return res.data;
 };
+
+export interface BudgetAlertPauseStatus {
+  is_paused: boolean;
+  paused_until?: string | null;
+}
+
+export const getBudgetAlertPauseStatus = async (): Promise<BudgetAlertPauseStatus> => {
+  const res = await api.get<BudgetAlertPauseStatus>('/user/budgets/alerts/status');
+  return res.data;
+};
+
+export const pauseBudgetAlerts = async (
+  duration: '1_day' | '1_week' | '1_month' | 'indefinite'
+): Promise<BudgetAlertPauseStatus> => {
+  const res = await api.post<BudgetAlertPauseStatus>('/user/budgets/alerts/pause', { duration });
+  return res.data;
+};
+
+export const resumeBudgetAlerts = async (): Promise<BudgetAlertPauseStatus> => {
+  const res = await api.post<BudgetAlertPauseStatus>('/user/budgets/alerts/resume');
+  return res.data;
+};
+
+export const updateBudgetCardAlerts = async (
+  budgetId: string,
+  data: {
+    thresholds: number[];
+    in_app: boolean;
+    email: boolean;
+    apply_to_all?: boolean;
+  }
+): Promise<Budget> => {
+  const res = await api.put<Budget>(`/user/budgets/${budgetId}/alerts`, data);
+  return res.data;
+};

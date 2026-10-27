@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
+import { PeriodCapsule } from '../components/PeriodCapsule';
 import type { PeriodType } from '../components/PeriodFilterDropdown';
 
 export interface ExpenseCategory {
@@ -662,6 +663,8 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <PeriodCapsule periodType={periodType} periodLabel={activePeriodLabel} />
+
           {/* Export Menu Dropdown (CSV / PDF) */}
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button

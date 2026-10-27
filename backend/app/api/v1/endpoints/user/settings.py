@@ -110,26 +110,11 @@ def change_password(
             detail="New passwords do not match."
         )
 
-    # Complexity rules: >=8 chars, 1 number, 1 uppercase, 1 special char
-    if len(req.new_password) < 8:
+    # Constraint: at least 6 characters long
+    if len(req.new_password) < 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters long."
-        )
-    if not re.search(r'[0-9]', req.new_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must contain at least one number."
-        )
-    if not re.search(r'[A-Z]', req.new_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must contain at least one uppercase letter."
-        )
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', req.new_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must contain at least one special character."
+            detail="Password must be at least 6 characters long."
         )
 
     # 4. Hash new password & invalidate all other sessions via token_version increment

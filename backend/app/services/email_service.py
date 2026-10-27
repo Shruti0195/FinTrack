@@ -278,15 +278,21 @@ def generate_budget_alert_email_html(
     pct_used: float,
     days_left: int
 ) -> str:
-    is_over = pct_used >= 100.0
-    status_title = f"Budget Alert: {category_name} is {'over limit' if is_over else f'{pct_used:.0f}% used'}"
+    round_pct = int(round(pct_used))
+    is_over = round_pct >= 100
+    if round_pct > 100:
+        status_title = f"{category_name} Budget Exceeded ({round_pct}%)"
+    elif round_pct == 100:
+        status_title = f"{category_name} Budget 100% Reached"
+    else:
+        status_title = f"{category_name} Budget {round_pct}% Reached"
     badge_color = "#EF4444" if is_over else "#F59E0B"
     badge_bg = "rgba(239, 68, 68, 0.1)" if is_over else "rgba(245, 158, 11, 0.1)"
     
     msg_body = (
-        f"You've exceeded your <b>{category_name}</b> budget limit of ₹{limit_amount:,.2f} (Spent: ₹{spent_amount:,.2f}). Adjust your budget or review upcoming expenses to stay on track."
+        f"You've exceeded your <b>{category_name}</b> budget limit of ₹{limit_amount:,.2f} (Spent: ₹{spent_amount:,.2f}, <b>{round_pct}%</b>). Adjust your budget or review upcoming expenses to stay on track."
         if is_over else
-        f"Your <b>{category_name}</b> budget is <b>{pct_used:.0f}% used</b> (₹{spent_amount:,.2f} of ₹{limit_amount:,.2f}) with {days_left} days left in the month. A little planning can keep you on track."
+        f"Your <b>{category_name}</b> budget is <b>{round_pct}% used</b> (₹{spent_amount:,.2f} of ₹{limit_amount:,.2f}) with {days_left} days left in the month. A little planning can keep you on track."
     )
     
     app_url = f"{settings.FRONTEND_URL}"
@@ -396,12 +402,18 @@ def send_budget_alert_email(
         pct_used=pct_used,
         days_left=days_left
     )
-    is_over = pct_used >= 100.0
-    subject = f"FinTrack Alert: {category_name} budget is {'over limit!' if is_over else f'{pct_used:.0f}% used'}"
+    round_pct = int(round(pct_used))
+    is_over = round_pct >= 100
+    if round_pct > 100:
+        subject = f"FinTrack Alert: {category_name} Budget Exceeded ({round_pct}%)"
+    elif round_pct == 100:
+        subject = f"FinTrack Alert: {category_name} Budget 100% Reached"
+    else:
+        subject = f"FinTrack Alert: {category_name} Budget {round_pct}% Reached"
     plain_text = (
         f"Hi {name},\n\n"
         f"Budget update for {category_name}:\n"
-        f"Spent: ₹{spent_amount:,.2f} / Limit: ₹{limit_amount:,.2f} ({pct_used:.0f}% used).\n\n"
+        f"Spent: ₹{spent_amount:,.2f} / Limit: ₹{limit_amount:,.2f} ({round_pct}% used).\n\n"
         f"Manage your budgets in FinTrack: {settings.FRONTEND_URL}\n"
     )
 
@@ -449,11 +461,18 @@ def generate_goal_milestone_email_html(
     milestone_pct: int
 ) -> str:
     is_completed = milestone_pct >= 100
-    status_title = f"Goal Update: {goal_title} is {'100% Achieved!' if is_completed else f'{milestone_pct}% Reached'}"
+    if milestone_pct > 100:
+        status_title = f"Goal Update: {goal_title} is {milestone_pct}% Achieved!"
+    elif milestone_pct == 100:
+        status_title = f"Goal Update: {goal_title} is 100% Achieved!"
+    else:
+        status_title = f"Goal Update: {goal_title} is {milestone_pct}% Reached"
     badge_color = "#10B981"
     badge_bg = "rgba(16, 185, 129, 0.12)"
     
     msg_body = (
+        f"Woohoo! You've achieved <b>{milestone_pct}%</b> of your <b>{goal_title}</b> savings goal (Target: ₹{target_amount:,.2f})! What an incredible milestone! 🎉"
+        if milestone_pct > 100 else
         f"Woohoo! You've fully achieved your <b>{goal_title}</b> savings goal of ₹{target_amount:,.2f}! What an incredible milestone! 🎉"
         if is_completed else
         f"Great progress! You've reached <b>{milestone_pct}%</b> (₹{saved_amount:,.2f} of ₹{target_amount:,.2f}) of your <b>{goal_title}</b> savings goal."
@@ -565,7 +584,12 @@ def send_goal_milestone_email(
         milestone_pct=milestone_pct
     )
     is_completed = milestone_pct >= 100
-    subject = f"FinTrack Goal Update: {goal_title} is {'100% Achieved!' if is_completed else f'{milestone_pct}% Reached'}"
+    if milestone_pct > 100:
+        subject = f"FinTrack Goal Update: {goal_title} is {milestone_pct}% Achieved!"
+    elif milestone_pct == 100:
+        subject = f"FinTrack Goal Update: {goal_title} is 100% Achieved!"
+    else:
+        subject = f"FinTrack Goal Update: {goal_title} is {milestone_pct}% Reached"
     plain_text = (
         f"Hi {name},\n\n"
         f"Goal milestone update for {goal_title}:\n"

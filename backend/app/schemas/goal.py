@@ -31,6 +31,21 @@ class GoalAlertSettings(BaseModel):
     in_app: bool = True
     email: bool = True
 
+class GoalAlertPauseRequest(BaseModel):
+    duration: str = Field(..., description="'1_day', '1_week', '1_month', or 'indefinite'")
+
+class GoalAlertStatusResponse(BaseModel):
+    is_paused: bool
+    paused_until: Optional[datetime] = None
+
+class GoalCardAlertUpdate(BaseModel):
+    milestone_thresholds: List[int] = Field(default=[25, 50, 75, 100], description="Milestone percentages up to 5, between 1 and 100")
+    deadline_reminder_days: Optional[int] = Field(7, description="Days before deadline: 7, 3, 0 (deadline day), or None")
+    inactivity_nudge_days: Optional[int] = Field(30, description="Days of inactivity before nudge: 14, 30, 60, or None (Off)")
+    in_app: bool = True
+    email: bool = True
+    apply_to_all: bool = False
+
 class GoalCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100, description="Goal name e.g. New Phone, Goa Trip")
     target_amount: float = Field(..., gt=0, description="Target savings amount in INR")

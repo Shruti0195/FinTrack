@@ -18,7 +18,10 @@ import {
   Home,
   RefreshCw,
   FolderMinus,
-  Bell
+  Bell,
+  BellOff,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { 
   getBudgets, 
@@ -26,11 +29,17 @@ import {
   getBudgetCategories, 
   createBudget, 
   updateBudget, 
-  deleteBudget 
+  deleteBudget,
+  getBudgetAlertPauseStatus,
+  pauseBudgetAlerts,
+  resumeBudgetAlerts,
+  getBudgetAlertSettings
 } from '../api/budgets';
 import api from '../api/client';
 import { CustomSelect } from './CustomSelect';
-import { BudgetAlertSettingsModal, formatBudgetAlertPreview } from './BudgetAlertSettingsModal';
+import { BudgetAlertSettingsModal, formatBudgetAlertPreview, formatBudgetCardBellSummary } from './BudgetAlertSettingsModal';
+import { PauseAlertsModal } from './PauseAlertsModal';
+import { PeriodCapsule } from './PeriodCapsule';
 import type { PeriodType } from './PeriodFilterDropdown';
 import type { 
   Budget, 
@@ -164,6 +173,7 @@ export interface BudgetsViewProps {
   periodType?: PeriodType;
   selectedQuarter?: number;
   selectedHalf?: number;
+  periodLabel?: string;
   highlightedBudgetId?: string | null;
   onClearHighlight?: () => void;
 }
@@ -174,6 +184,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   periodType: propPeriodType,
   selectedQuarter: propQuarter,
   selectedHalf: propHalf,
+  periodLabel: propPeriodLabel,
   highlightedBudgetId: propHighlightedBudgetId,
   onClearHighlight
 }) => {
@@ -233,6 +244,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAlertSettingsModalOpen, setIsAlertSettingsModalOpen] = useState(false);
+  const [selectedBudgetForAlerts, setSelectedBudgetForAlerts] = useState<Budget | null>(null);
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+  const [isAlertsPaused, setIsAlertsPaused] = useState(false);
+  const [pausedUntil, setPausedUntil] = useState<string | null>(null);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [deletingBudgetId, setDeletingBudgetId] = useState<string | null>(null);
 
@@ -244,8 +259,8 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Per-budget custom alerts override state
-  const [overrideAlerts, setOverrideAlerts] = useState<boolean>(false);
+  // Alert accordion state for Create / Edit modal
+  const [isAlertAccordionOpen, setIsAlertAccordionOpen] = useState<boolean>(false);
   const [customThresholds, setCustomThresholds] = useState<number[]>([80, 100]);
   const [customInApp, setCustomInApp] = useState<boolean>(true);
   const [customEmail, setCustomEmail] = useState<boolean>(true);
@@ -299,7 +314,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           : 1;
 
     try {
-      const [budgetsData, summaryData, categoriesData] = await Promise.all([
+      const [budgetsData, summaryData, categoriesData, pauseStatus] = await Promise.all([
         getBudgets({
           period_type: activePeriod,
           period_value: periodValue,
@@ -312,11 +327,14 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           month: selectedMonth,
           year: selectedYear
         }),
-        getBudgetCategories()
+        getBudgetCategories(),
+        getBudgetAlertPauseStatus().catch(() => ({ is_paused: false, paused_until: null }))
       ]);
       setBudgets(budgetsData);
       setSummary(summaryData);
       setCategories(categoriesData);
+      setIsAlertsPaused(pauseStatus.is_paused);
+      setPausedUntil(pauseStatus.paused_until || null);
     } catch (err: any) {
       console.warn('Backend budgets API unavailable or unauthenticated, loading fallback demo data:', err);
       const { mockBudgets, mockSummary } = getFallbackBudgetData(activePeriod, periodValue, selectedYear);
@@ -340,12 +358,51 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
     }
   }, [successMsg]);
 
+  // Alert pause handlers
+  const handleResumeAlerts = async () => {
+    try {
+      const res = await resumeBudgetAlerts();
+      setIsAlertsPaused(res.is_paused);
+      setPausedUntil(null);
+      setSuccessMsg('Budget alerts resumed.');
+      fetchData();
+    } catch {
+      setErrorMsg('Failed to resume budget alerts.');
+    }
+  };
+
+  const handleConfirmPause = async (duration: '1_day' | '1_week' | '1_month' | 'indefinite') => {
+    try {
+      const res = await pauseBudgetAlerts(duration);
+      setIsAlertsPaused(res.is_paused);
+      setPausedUntil(res.paused_until || null);
+      setSuccessMsg('Budget alerts paused.');
+      fetchData();
+    } catch {
+      setErrorMsg('Failed to pause budget alerts.');
+    }
+  };
+
   // Open create modal
   const handleOpenCreateModal = () => {
     setFormError(null);
     setFormLimitAmount('');
     setFormMonth(selectedMonth);
     setFormYear(selectedYear);
+    setIsAlertAccordionOpen(false);
+
+    // Fetch user remembered alert settings for starting values
+    getBudgetAlertSettings()
+      .then((data) => {
+        setCustomThresholds(data.thresholds || [80, 100]);
+        setCustomInApp(data.in_app ?? true);
+        setCustomEmail(data.email ?? true);
+      })
+      .catch(() => {
+        setCustomThresholds([80, 100]);
+        setCustomInApp(true);
+        setCustomEmail(true);
+      });
 
     // Auto-select first category that isn't budgeted yet
     const budgetedCatIds = new Set(budgets.map(b => b.category_id));
@@ -375,7 +432,11 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
         month: formMonth,
         year: formYear,
         limit_amount: limit,
-        apply_to_period: 'single_month'
+        apply_to_period: 'single_month',
+        has_custom_alerts: true,
+        custom_alert_thresholds: customThresholds.length > 0 ? customThresholds : [80, 100],
+        custom_alert_in_app: customInApp,
+        custom_alert_email: customEmail
       });
       setIsCreateModalOpen(false);
       const catName = categories.find(c => c.id === formCategoryId)?.name || 'Category';
@@ -434,10 +495,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   const handleOpenEditModal = (b: Budget) => {
     setEditingBudget(b);
     setFormLimitAmount(b.limit_amount.toString());
-    setOverrideAlerts(Boolean(b.has_custom_alerts));
     setCustomThresholds(b.custom_alert_thresholds && b.custom_alert_thresholds.length > 0 ? b.custom_alert_thresholds : [80, 100]);
     setCustomInApp(b.custom_alert_in_app !== null && b.custom_alert_in_app !== undefined ? b.custom_alert_in_app : true);
     setCustomEmail(b.custom_alert_email !== null && b.custom_alert_email !== undefined ? b.custom_alert_email : true);
+    setIsAlertAccordionOpen(false);
     setCustomPctInput('');
     setCustomPctError('');
     setFormError(null);
@@ -458,10 +519,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
     try {
       await updateBudget(editingBudget.id, { 
         limit_amount: limit,
-        has_custom_alerts: overrideAlerts,
-        custom_alert_thresholds: overrideAlerts ? (customThresholds.length > 0 ? customThresholds : [80, 100]) : null,
-        custom_alert_in_app: overrideAlerts ? customInApp : null,
-        custom_alert_email: overrideAlerts ? customEmail : null
+        has_custom_alerts: true,
+        custom_alert_thresholds: customThresholds.length > 0 ? customThresholds : [80, 100],
+        custom_alert_in_app: customInApp,
+        custom_alert_email: customEmail
       });
       setEditingBudget(null);
       setSuccessMsg(`Budget for ${editingBudget.category_name} updated!`);
@@ -522,22 +583,79 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Alert Settings Button */}
-          <button
-            onClick={() => setIsAlertSettingsModalOpen(true)}
-            className="btn btn-outline"
+          <PeriodCapsule
+            periodType={activePeriod}
+            periodLabel={summary?.period_label || propPeriodLabel || `${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`}
+          />
+          {/* Budget alerts pause switch */}
+          <div
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '9px 16px',
-              fontSize: '13.5px',
-              fontWeight: 600
+              gap: '8px',
+              padding: '7px 12px',
+              backgroundColor: 'var(--card-subtle)',
+              border: '1px solid var(--border)',
+              borderRadius: '10px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--primary)',
             }}
           >
-            <Bell size={16} />
-            Alert settings
-          </button>
+            {isAlertsPaused ? (
+              <BellOff size={15} color="var(--secondary-text)" />
+            ) : (
+              <Bell size={15} color="var(--accent)" />
+            )}
+            <span>Budget alerts</span>
+            <label
+              style={{
+                position: 'relative',
+                display: 'inline-block',
+                width: '36px',
+                height: '20px',
+                cursor: 'pointer',
+                margin: 0,
+              }}
+              title={isAlertsPaused ? 'Click to resume alerts' : 'Click to pause alerts'}
+            >
+              <input
+                type="checkbox"
+                checked={!isAlertsPaused}
+                onChange={(e) => {
+                  if (!e.target.checked) {
+                    setIsPauseModalOpen(true);
+                  } else {
+                    handleResumeAlerts();
+                  }
+                }}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: !isAlertsPaused ? 'var(--accent)' : 'var(--border)',
+                  borderRadius: '20px',
+                  transition: '0.2s ease',
+                }}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    content: '""',
+                    height: '14px',
+                    width: '14px',
+                    left: !isAlertsPaused ? '19px' : '3px',
+                    bottom: '3px',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '50%',
+                    transition: '0.2s ease',
+                  }}
+                />
+              </span>
+            </label>
+          </div>
 
           {/* Set New Budget Button */}
           <button
@@ -558,6 +676,49 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* TOP PAUSE BANNER */}
+      {isAlertsPaused && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 18px',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            borderRadius: '12px',
+            color: 'var(--primary)',
+            fontSize: '13px',
+            fontWeight: 500,
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <BellOff size={16} color="#F59E0B" style={{ flexShrink: 0 }} />
+            <span>
+              {pausedUntil
+                ? `Budget alerts are paused until ${new Date(pausedUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`
+                : 'Budget alerts are paused.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleResumeAlerts}
+            className="btn btn-outline"
+            style={{
+              padding: '5px 12px',
+              fontSize: '12.5px',
+              borderColor: '#F59E0B',
+              color: '#F59E0B',
+              fontWeight: 600,
+            }}
+          >
+            Resume
+          </button>
+        </div>
+      )}
 
       {/* SUCCESS / ERROR TOASTS */}
       {successMsg && (
@@ -860,23 +1021,6 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                             <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--primary)' }}>
                               {b.category_name}
                             </span>
-                            {b.has_custom_alerts && (
-                              <span 
-                                title="Custom alerts active for this budget" 
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: 'var(--accent)',
-                                  backgroundColor: 'var(--light-accent)',
-                                  borderRadius: '999px',
-                                  padding: '2px 5px',
-                                  fontSize: '10px'
-                                }}
-                              >
-                                <Bell size={12} />
-                              </span>
-                            )}
                           </div>
                           <div style={{ fontSize: '11.5px', color: 'var(--secondary-text)' }}>
                             {activePeriod === 'monthly' ? 'Monthly Limit' : `${b.period_label || 'Period'} Total`}
@@ -966,6 +1110,54 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                         transition: 'width 0.3s ease'
                       }} />
                     </div>
+
+                    {/* Card-level Alert Summary Bell Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBudgetForAlerts(b);
+                        setIsAlertSettingsModalOpen(true);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        border: isAlertsPaused ? '1px dashed var(--border)' : '1px solid rgba(16, 185, 129, 0.25)',
+                        backgroundColor: isAlertsPaused ? 'var(--card-subtle)' : 'rgba(16, 185, 129, 0.08)',
+                        color: isAlertsPaused ? 'var(--secondary-text)' : 'var(--accent)',
+                        fontSize: '11.5px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        width: '100%',
+                        marginBottom: '10px',
+                        textAlign: 'left',
+                        transition: '0.15s ease',
+                      }}
+                      title="Click to view and edit alert settings for this budget"
+                    >
+                      {isAlertsPaused ? (
+                        <BellOff size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
+                      ) : (
+                        <Bell size={13} style={{ flexShrink: 0 }} />
+                      )}
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          opacity: isAlertsPaused ? 0.75 : 1,
+                        }}
+                      >
+                        {formatBudgetCardBellSummary(
+                          b.custom_alert_thresholds,
+                          b.custom_alert_in_app,
+                          b.custom_alert_email,
+                          isAlertsPaused
+                        )}
+                      </span>
+                    </button>
                   </div>
 
                   {/* Card Footer */}
@@ -1162,6 +1354,165 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                 </span>
               </div>
 
+              {/* Collapsible Alert Settings Section */}
+              <div
+                style={{
+                  borderRadius: '10px',
+                  backgroundColor: 'var(--card-subtle)',
+                  border: '1px solid var(--border)',
+                  overflow: 'hidden',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsAlertAccordionOpen(!isAlertAccordionOpen)}
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--primary)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Bell size={15} color="var(--accent)" />
+                    <span>Alert settings</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)', fontSize: '12px' }}>
+                    <span>{customThresholds.length > 0 ? customThresholds.map((t) => `${t}%`).join(', ') : 'None'}</span>
+                    {isAlertAccordionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+                </button>
+
+                {isAlertAccordionOpen && (
+                  <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ paddingTop: '10px' }}>
+                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                        Alert me at (% of budget used):
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                        {QUICK_PERCENTAGES.map((pct) => {
+                          const isSel = customThresholds.includes(pct);
+                          return (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => toggleCustomThreshold(pct)}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '999px',
+                                border: isSel ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                                backgroundColor: isSel ? 'var(--light-accent)' : 'var(--card-box)',
+                                color: isSel ? 'var(--accent)' : 'var(--main-text)',
+                                fontSize: '11.5px',
+                                fontWeight: isSel ? 700 : 500,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {pct}%
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                        <input
+                          type="number"
+                          min="1"
+                          max="150"
+                          placeholder="Custom % (1-150)"
+                          value={customPctInput}
+                          onChange={(e) => setCustomPctInput(e.target.value)}
+                          style={{
+                            flex: 1,
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border)',
+                            backgroundColor: 'var(--card-box)',
+                            color: 'var(--main-text)',
+                            fontSize: '12px',
+                            outline: 'none',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomPct}
+                          className="btn btn-outline"
+                          style={{ padding: '6px 10px', fontSize: '12px' }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                      {customPctError && (
+                        <span style={{ fontSize: '11px', color: 'var(--danger)', display: 'block', marginBottom: '6px' }}>
+                          {customPctError}
+                        </span>
+                      )}
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {customThresholds.map((pct) => (
+                          <span
+                            key={pct}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                              color: 'var(--accent)',
+                              border: '1px solid rgba(16, 185, 129, 0.25)',
+                            }}
+                          >
+                            {pct}%
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCustomThreshold(pct)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--accent)' }}
+                            >
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '12.5px', color: 'var(--main-text)' }}>In-app notification</span>
+                        <input
+                          type="checkbox"
+                          checked={customInApp}
+                          onChange={(e) => setCustomInApp(e.target.checked)}
+                          style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '12.5px', color: 'var(--main-text)' }}>Email notification</span>
+                        <input
+                          type="checkbox"
+                          checked={customEmail}
+                          onChange={(e) => setCustomEmail(e.target.checked)}
+                          style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '11.5px', color: !customInApp && !customEmail ? 'var(--warning)' : 'var(--secondary-text)', lineHeight: 1.4 }}>
+                      {formatBudgetAlertPreview(customThresholds, customInApp, customEmail, true)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Buttons */}
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button
@@ -1252,47 +1603,45 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                 </span>
               </div>
 
-              {/* Alert Settings Override */}
-              <div style={{
-                padding: '14px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--card-subtle)',
-                border: '1px solid var(--border)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                  <Bell size={16} color="var(--accent)" />
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
-                    Alert Notifications
-                  </span>
-                </div>
+              {/* Collapsible Alert Settings Section */}
+              <div
+                style={{
+                  borderRadius: '10px',
+                  backgroundColor: 'var(--card-subtle)',
+                  border: '1px solid var(--border)',
+                  overflow: 'hidden',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsAlertAccordionOpen(!isAlertAccordionOpen)}
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--primary)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Bell size={15} color="var(--accent)" />
+                    <span>Alert settings</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)', fontSize: '12px' }}>
+                    <span>{customThresholds.length > 0 ? customThresholds.map((t) => `${t}%`).join(', ') : 'None'}</span>
+                    {isAlertAccordionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+                </button>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: overrideAlerts ? '14px' : '0px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--main-text)' }}>
-                    <input
-                      type="radio"
-                      name="budgetAlertMode"
-                      checked={!overrideAlerts}
-                      onChange={() => setOverrideAlerts(false)}
-                      style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                    />
-                    <span>Use my default alert settings</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--main-text)' }}>
-                    <input
-                      type="radio"
-                      name="budgetAlertMode"
-                      checked={overrideAlerts}
-                      onChange={() => setOverrideAlerts(true)}
-                      style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                    />
-                    <span>Set custom alerts for this budget</span>
-                  </label>
-                </div>
-
-                {overrideAlerts && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
-                    {/* Percentages */}
-                    <div>
+                {isAlertAccordionOpen && (
+                  <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ paddingTop: '10px' }}>
                       <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
                         Alert me at (% of budget used):
                       </span>
@@ -1312,7 +1661,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                                 color: isSel ? 'var(--accent)' : 'var(--main-text)',
                                 fontSize: '11.5px',
                                 fontWeight: isSel ? 700 : 500,
-                                cursor: 'pointer'
+                                cursor: 'pointer',
                               }}
                             >
                               {pct}%
@@ -1321,8 +1670,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                         })}
                       </div>
 
-                      {/* Custom input */}
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
                         <input
                           type="number"
                           min="1"
@@ -1330,27 +1678,32 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                           placeholder="Custom % (1-150)"
                           value={customPctInput}
                           onChange={(e) => setCustomPctInput(e.target.value)}
-                          className="input-field"
-                          style={{ height: '32px', fontSize: '12px', flex: 1, padding: '4px 8px' }}
+                          style={{
+                            flex: 1,
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border)',
+                            backgroundColor: 'var(--card-box)',
+                            color: 'var(--main-text)',
+                            fontSize: '12px',
+                            outline: 'none',
+                          }}
                         />
                         <button
                           type="button"
                           onClick={handleAddCustomPct}
-                          disabled={!customPctInput || customThresholds.length >= 5}
                           className="btn btn-outline"
-                          style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}
+                          style={{ padding: '6px 10px', fontSize: '12px' }}
                         >
                           Add
                         </button>
                       </div>
-
                       {customPctError && (
-                        <div style={{ fontSize: '11.5px', color: 'var(--danger)', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--danger)', display: 'block', marginBottom: '6px' }}>
                           {customPctError}
-                        </div>
+                        </span>
                       )}
 
-                      {/* Selected chips */}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                         {customThresholds.map((pct) => (
                           <span
@@ -1359,20 +1712,20 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              padding: '2px 7px',
-                              borderRadius: '4px',
-                              backgroundColor: 'var(--card-box)',
-                              border: '1px solid var(--accent)',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: 'rgba(16, 185, 129, 0.12)',
                               color: 'var(--accent)',
-                              fontSize: '11.5px',
-                              fontWeight: 600
+                              border: '1px solid rgba(16, 185, 129, 0.25)',
                             }}
                           >
                             {pct}%
                             <button
                               type="button"
                               onClick={() => handleRemoveCustomThreshold(pct)}
-                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--secondary-text)' }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--accent)' }}
                             >
                               <X size={10} />
                             </button>
@@ -1381,42 +1734,28 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                       </div>
                     </div>
 
-                    {/* How to be told */}
-                    <div>
-                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                        How to be told:
-                      </span>
-                      <div style={{ display: 'flex', gap: '16px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', color: 'var(--main-text)' }}>
-                          <input
-                            type="checkbox"
-                            checked={customInApp}
-                            onChange={(e) => setCustomInApp(e.target.checked)}
-                            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                          />
-                          In-app notification
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', color: 'var(--main-text)' }}>
-                          <input
-                            type="checkbox"
-                            checked={customEmail}
-                            onChange={(e) => setCustomEmail(e.target.checked)}
-                            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                          />
-                          Email
-                        </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '12.5px', color: 'var(--main-text)' }}>In-app notification</span>
+                        <input
+                          type="checkbox"
+                          checked={customInApp}
+                          onChange={(e) => setCustomInApp(e.target.checked)}
+                          style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '12.5px', color: 'var(--main-text)' }}>Email notification</span>
+                        <input
+                          type="checkbox"
+                          checked={customEmail}
+                          onChange={(e) => setCustomEmail(e.target.checked)}
+                          style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                        />
                       </div>
                     </div>
 
-                    {/* Preview / Gentle warning */}
-                    <div style={{
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      backgroundColor: (!customInApp && !customEmail) ? 'var(--light-danger)' : 'var(--light-accent)',
-                      color: (!customInApp && !customEmail) ? 'var(--danger)' : 'var(--accent)',
-                      fontSize: '11.5px',
-                      lineHeight: '1.4'
-                    }}>
+                    <div style={{ fontSize: '11.5px', color: !customInApp && !customEmail ? 'var(--warning)' : 'var(--secondary-text)', lineHeight: 1.4 }}>
                       {formatBudgetAlertPreview(customThresholds, customInApp, customEmail, true)}
                     </div>
                   </div>
@@ -1501,8 +1840,21 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
       {/* 7. MODAL: BUDGET ALERT SETTINGS */}
       <BudgetAlertSettingsModal
         isOpen={isAlertSettingsModalOpen}
-        onClose={() => setIsAlertSettingsModalOpen(false)}
+        onClose={() => {
+          setIsAlertSettingsModalOpen(false);
+          setSelectedBudgetForAlerts(null);
+        }}
+        budget={selectedBudgetForAlerts}
+        isPagePaused={isAlertsPaused}
         onSaved={fetchData}
+      />
+
+      {/* 8. MODAL: PAUSE ALERTS DURATION */}
+      <PauseAlertsModal
+        isOpen={isPauseModalOpen}
+        onClose={() => setIsPauseModalOpen(false)}
+        onConfirm={handleConfirmPause}
+        type="budget"
       />
 
     </div>

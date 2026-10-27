@@ -98,3 +98,38 @@ export async function fetchAnalyticsOverview(params: {
   const res = await api.get('/user/analytics/overview', { params });
   return res.data;
 }
+
+export async function downloadAnalyticsPdfReport(params: {
+  period_type: string;
+  year: number;
+  month?: number;
+  quarter?: number;
+  half?: number;
+}): Promise<{ blob: Blob; filename: string }> {
+  const res = await api.get('/user/analytics/report/pdf', {
+    params,
+    responseType: 'blob',
+  });
+
+  let filename = `FinTrack-Report-${params.year}.pdf`;
+  const disposition = res.headers['content-disposition'] || res.headers['Content-Disposition'];
+  if (disposition) {
+    const match = disposition.match(/filename=["']?([^"';]+)["']?/);
+    if (match && match[1]) filename = match[1];
+  } else {
+    if (params.period_type === 'monthly' && params.month) {
+      const mShort = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][params.month];
+      filename = `FinTrack-Report-${mShort}-${params.year}.pdf`;
+    } else if (params.period_type === 'quarterly' && params.quarter) {
+      filename = `FinTrack-Report-Q${params.quarter}-${params.year}.pdf`;
+    } else if (params.period_type === 'half_year' && params.half) {
+      filename = `FinTrack-Report-H${params.half}-${params.year}.pdf`;
+    }
+  }
+
+  return {
+    blob: new Blob([res.data], { type: 'application/pdf' }),
+    filename,
+  };
+}
+

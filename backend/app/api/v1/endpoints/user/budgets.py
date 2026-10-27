@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -17,6 +17,9 @@ from app.schemas.budget import (
     BudgetSummaryResponse,
     BudgetCategoryOption,
     BudgetAlertSettings,
+    BudgetAlertPauseRequest,
+    BudgetAlertStatusResponse,
+    BudgetCardAlertUpdate,
 )
 from app.api.deps import get_current_user
 
@@ -77,18 +80,31 @@ def parse_period(
         return "monthly", target_month, [target_month], target_year, label
 
 
+def get_budget_status_info(spent: float, limit: float) -> tuple[str, str, str]:
+    """
+    Shared budget status logic used across Budgets API and PDF reports:
+    - >= 100% or spent > limit: ('exceeded', 'Over budget', '#EF4444')
+    - >= 75%: ('warning', 'Near limit', '#F59E0B')
+    - < 75%: ('safe', 'On track', '#10B981')
+    """
+    if limit <= 0:
+        return "safe", "On track", "#10B981"
+    pct = (spent / limit) * 100.0
+    if spent > limit or pct >= 100.0:
+        return "exceeded", "Over budget", "#EF4444"
+    elif pct >= 75.0:
+        return "warning", "Near limit", "#F59E0B"
+    else:
+        return "safe", "On track", "#10B981"
+
+
 def _format_budget_response(b: Budget, category_name: str, spent_amount: float) -> BudgetResponse:
     limit = float(b.limit_amount)
     spent = round(float(spent_amount), 2)
     remaining = max(0.0, round(limit - spent, 2))
     percentage = round((spent / limit) * 100, 1) if limit > 0 else 0.0
 
-    if spent > limit:
-        calc_status = "exceeded"
-    elif spent >= (0.8 * limit):
-        calc_status = "warning"
-    else:
-        calc_status = "safe"
+    calc_status, _, _ = get_budget_status_info(spent, limit)
 
     month_names = [
         "January", "February", "March", "April", "May", "June",
@@ -179,6 +195,165 @@ def update_user_budget_alert_settings(
         in_app=current_user.budget_alert_in_app,
         email=current_user.budget_alert_email,
     )
+
+
+@router.get("/alerts/status", response_model=BudgetAlertStatusResponse)
+def get_budget_alerts_status(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Check if budget alerts are currently paused and until when.
+    """
+    now = datetime.now(timezone.utc)
+    is_paused = current_user.is_budget_alerts_paused(now)
+    return BudgetAlertStatusResponse(
+        is_paused=is_paused,
+        paused_until=current_user.budget_alerts_paused_until if is_paused else None,
+    )
+
+
+@router.post("/alerts/pause", response_model=BudgetAlertStatusResponse)
+def pause_budget_alerts(
+    pause_in: BudgetAlertPauseRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Pause budget alerts for a specified duration or indefinitely.
+    """
+    now = datetime.now(timezone.utc)
+    if pause_in.duration == "1_day":
+        paused_until = now + timedelta(days=1)
+    elif pause_in.duration == "1_week":
+        paused_until = now + timedelta(days=7)
+    elif pause_in.duration == "1_month":
+        paused_until = now + timedelta(days=30)
+    else:  # "indefinite"
+        paused_until = None
+
+    current_user.budget_alerts_paused = True
+    current_user.budget_alerts_paused_until = paused_until
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+
+    return BudgetAlertStatusResponse(
+        is_paused=True,
+        paused_until=current_user.budget_alerts_paused_until,
+    )
+
+
+@router.post("/alerts/resume", response_model=BudgetAlertStatusResponse)
+def resume_budget_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Resume budget alerts immediately.
+    """
+    current_user.budget_alerts_paused = False
+    current_user.budget_alerts_paused_until = None
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
+    return BudgetAlertStatusResponse(
+        is_paused=False,
+        paused_until=None,
+    )
+
+
+@router.put("/{budget_id}/alerts", response_model=BudgetResponse)
+def update_single_budget_alerts(
+    budget_id: uuid.UUID,
+    alert_in: BudgetCardAlertUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update alert settings for an individual budget card, with optional 'apply to all'.
+    """
+    row = (
+        db.query(Budget, Category.name.label("category_name"))
+        .join(Category, Budget.category_id == Category.id)
+        .filter(Budget.id == budget_id, Budget.user_id == current_user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Budget not found.",
+        )
+
+    b, cat_name = row
+    clean_thresholds = sorted(list(set(int(t) for t in alert_in.thresholds if 1 <= int(t) <= 150)))[:5]
+    if not clean_thresholds and (alert_in.in_app or alert_in.email):
+        clean_thresholds = [80, 100]
+
+    b.has_custom_alerts = True
+    b.custom_alert_thresholds = clean_thresholds
+    b.custom_alert_in_app = alert_in.in_app
+    b.custom_alert_email = alert_in.email
+
+    spent = (
+        db.query(func.coalesce(func.sum(Transaction.amount), 0))
+        .filter(
+            Transaction.user_id == current_user.id,
+            Transaction.category_id == b.category_id,
+            Transaction.type == "expense",
+            func.extract("month", Transaction.transaction_date) == b.month,
+            func.extract("year", Transaction.transaction_date) == b.year,
+        )
+        .scalar()
+        or 0.0
+    )
+    b.alert_baseline_pct = round((float(spent) / float(b.limit_amount) * 100.0), 2) if float(b.limit_amount) > 0 else 0.0
+    db.add(b)
+
+    # Remember user's last choice
+    current_user.budget_alert_thresholds = clean_thresholds
+    current_user.budget_alert_in_app = alert_in.in_app
+    current_user.budget_alert_email = alert_in.email
+    db.add(current_user)
+
+    if alert_in.apply_to_all:
+        other_budgets = db.query(Budget).filter(Budget.user_id == current_user.id, Budget.id != b.id).all()
+        for ob in other_budgets:
+            ob.has_custom_alerts = True
+            ob.custom_alert_thresholds = clean_thresholds
+            ob.custom_alert_in_app = alert_in.in_app
+            ob.custom_alert_email = alert_in.email
+            ob_spent = (
+                db.query(func.coalesce(func.sum(Transaction.amount), 0))
+                .filter(
+                    Transaction.user_id == current_user.id,
+                    Transaction.category_id == ob.category_id,
+                    Transaction.type == "expense",
+                    func.extract("month", Transaction.transaction_date) == ob.month,
+                    func.extract("year", Transaction.transaction_date) == ob.year,
+                )
+                .scalar()
+                or 0.0
+            )
+            ob.alert_baseline_pct = round((float(ob_spent) / float(ob.limit_amount) * 100.0), 2) if float(ob.limit_amount) > 0 else 0.0
+            db.add(ob)
+
+    db.commit()
+    db.refresh(b)
+
+    try:
+        from app.services.notification_service import evaluate_and_generate_notifications
+        evaluate_and_generate_notifications(db, current_user)
+    except Exception:
+        db.rollback()
+
+    return _format_budget_response(b, cat_name, float(spent))
 
 
 @router.get("/categories", response_model=List[BudgetCategoryOption])
@@ -514,6 +689,21 @@ def create_budget(
     # 3. Validate that total monthly budget limit does not exceed monthly income
     check_budget_income_limit(db, current_user.id, target_months, budget_in.year, float(budget_in.limit_amount))
 
+    # Determine alert settings: use provided or user's remembered defaults
+    if budget_in.custom_alert_thresholds is not None:
+        init_thresholds = sorted(list(set(int(t) for t in budget_in.custom_alert_thresholds if 1 <= int(t) <= 150)))[:5]
+        init_in_app = budget_in.custom_alert_in_app if budget_in.custom_alert_in_app is not None else True
+        init_email = budget_in.custom_alert_email if budget_in.custom_alert_email is not None else True
+        # Remember this choice
+        current_user.budget_alert_thresholds = init_thresholds
+        current_user.budget_alert_in_app = init_in_app
+        current_user.budget_alert_email = init_email
+        db.add(current_user)
+    else:
+        init_thresholds = current_user.budget_alert_thresholds or [80, 100]
+        init_in_app = current_user.budget_alert_in_app if current_user.budget_alert_in_app is not None else True
+        init_email = current_user.budget_alert_email if current_user.budget_alert_email is not None else True
+
     if budget_in.apply_to_period == "single_month":
         # Check duplicate
         existing = (
@@ -538,10 +728,10 @@ def create_budget(
             month=budget_in.month,
             year=budget_in.year,
             limit_amount=budget_in.limit_amount,
-            has_custom_alerts=bool(budget_in.has_custom_alerts),
-            custom_alert_thresholds=budget_in.custom_alert_thresholds,
-            custom_alert_in_app=budget_in.custom_alert_in_app,
-            custom_alert_email=budget_in.custom_alert_email,
+            has_custom_alerts=True,
+            custom_alert_thresholds=init_thresholds,
+            custom_alert_in_app=init_in_app,
+            custom_alert_email=init_email,
             alert_baseline_pct=0.0,
         )
         db.add(new_budget)
@@ -563,11 +753,10 @@ def create_budget(
             )
             if existing:
                 existing.limit_amount = budget_in.limit_amount
-                if budget_in.has_custom_alerts is not None:
-                    existing.has_custom_alerts = budget_in.has_custom_alerts
-                    existing.custom_alert_thresholds = budget_in.custom_alert_thresholds
-                    existing.custom_alert_in_app = budget_in.custom_alert_in_app
-                    existing.custom_alert_email = budget_in.custom_alert_email
+                existing.has_custom_alerts = True
+                existing.custom_alert_thresholds = init_thresholds
+                existing.custom_alert_in_app = init_in_app
+                existing.custom_alert_email = init_email
                 created_budgets.append(existing)
             else:
                 nb = Budget(
@@ -577,10 +766,10 @@ def create_budget(
                     month=m,
                     year=budget_in.year,
                     limit_amount=budget_in.limit_amount,
-                    has_custom_alerts=bool(budget_in.has_custom_alerts),
-                    custom_alert_thresholds=budget_in.custom_alert_thresholds,
-                    custom_alert_in_app=budget_in.custom_alert_in_app,
-                    custom_alert_email=budget_in.custom_alert_email,
+                    has_custom_alerts=True,
+                    custom_alert_thresholds=init_thresholds,
+                    custom_alert_in_app=init_in_app,
+                    custom_alert_email=init_email,
                     alert_baseline_pct=0.0,
                 )
                 db.add(nb)

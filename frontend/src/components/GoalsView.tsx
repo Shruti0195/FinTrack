@@ -18,7 +18,10 @@ import {
   Gift,
   Heart,
   Zap,
-  Bell
+  Bell,
+  BellOff,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import type { Goal, GoalSummary, GoalContribution } from '../api/goals';
 import {
@@ -30,8 +33,14 @@ import {
   addGoalContribution,
   updateGoalContribution,
   deleteGoalContribution,
+  getGoalAlertPauseStatus,
+  pauseGoalAlerts,
+  resumeGoalAlerts,
+  getGoalAlertSettings
 } from '../api/goals';
-import { GoalAlertSettingsModal, formatGoalAlertPreview } from './GoalAlertSettingsModal';
+import { GoalAlertSettingsModal, formatGoalAlertPreview, formatGoalCardBellSummary } from './GoalAlertSettingsModal';
+import { PauseAlertsModal } from './PauseAlertsModal';
+import { PeriodCapsule } from './PeriodCapsule';
 
 const QUICK_MILESTONES = [25, 50, 75, 100];
 
@@ -95,12 +104,16 @@ export interface GoalsViewProps {
   highlightedGoalId?: string | null;
   onClearHighlight?: () => void;
   onRefreshNotifications?: () => void;
+  periodType?: string;
+  periodLabel?: string;
 }
 
 export const GoalsView: React.FC<GoalsViewProps> = ({
   highlightedGoalId: propHighlightedGoalId,
   onClearHighlight,
-  onRefreshNotifications
+  onRefreshNotifications,
+  periodType = 'monthly',
+  periodLabel = ''
 }) => {
   // State
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -170,9 +183,15 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   const [formIcon, setFormIcon] = useState('target');
   const [formError, setFormError] = useState('');
 
-  // Alert settings modal & per-goal overrides
+  // Alert settings modal & per-goal alerts
   const [isAlertSettingsModalOpen, setIsAlertSettingsModalOpen] = useState(false);
-  const [overrideAlerts, setOverrideAlerts] = useState(false);
+  const [selectedGoalForAlerts, setSelectedGoalForAlerts] = useState<Goal | null>(null);
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+  const [isAlertsPaused, setIsAlertsPaused] = useState(false);
+  const [pausedUntil, setPausedUntil] = useState<string | null>(null);
+
+  // Form custom alerts state for Create / Edit modal (accordion)
+  const [isAlertAccordionOpen, setIsAlertAccordionOpen] = useState<boolean>(false);
   const [customMilestones, setCustomMilestones] = useState<number[]>([25, 50, 75, 100]);
   const [customDeadlineReminder, setCustomDeadlineReminder] = useState<number>(7);
   const [customInactivityNudge, setCustomInactivityNudge] = useState<number>(30);
@@ -182,9 +201,14 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   const [customMilestoneError, setCustomMilestoneError] = useState('');
 
   const toggleCustomMilestone = (m: number) => {
+    setCustomMilestoneError('');
     if (customMilestones.includes(m)) {
       setCustomMilestones(customMilestones.filter((x) => x !== m));
     } else {
+      if (customMilestones.length >= 5) {
+        setCustomMilestoneError('Maximum 5 milestone alerts allowed.');
+        return;
+      }
       setCustomMilestones([...customMilestones, m].sort((a, b) => a - b));
     }
   };
@@ -199,6 +223,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     }
     if (customMilestones.includes(val)) {
       setCustomMilestoneError('Milestone already exists.');
+      return;
+    }
+    if (customMilestones.length >= 5) {
+      setCustomMilestoneError('Maximum 5 milestone alerts allowed.');
       return;
     }
     setCustomMilestones([...customMilestones, val].sort((a, b) => a - b));
@@ -219,12 +247,15 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   const loadGoalsData = useCallback(async () => {
     try {
       setLoading(true);
-      const [goalsData, summaryData] = await Promise.all([
+      const [goalsData, summaryData, pauseStatus] = await Promise.all([
         getGoals(filterTab === 'all' ? undefined : filterTab),
-        getGoalsSummary()
+        getGoalsSummary(),
+        getGoalAlertPauseStatus().catch(() => ({ is_paused: false, paused_until: null }))
       ]);
       setGoals(goalsData);
       setSummary(summaryData);
+      setIsAlertsPaused(pauseStatus.is_paused);
+      setPausedUntil(pauseStatus.paused_until || null);
     } catch (err) {
       console.error('Failed to load goals:', err);
     } finally {
@@ -235,6 +266,31 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   useEffect(() => {
     loadGoalsData();
   }, [loadGoalsData]);
+
+  // Alert pause handlers
+  const handleResumeAlerts = async () => {
+    try {
+      const res = await resumeGoalAlerts();
+      setIsAlertsPaused(res.is_paused);
+      setPausedUntil(null);
+      showToast('Goal alerts resumed.', 'info');
+      await loadGoalsData();
+    } catch {
+      showToast('Failed to resume goal alerts.', 'info');
+    }
+  };
+
+  const handleConfirmPause = async (duration: '1_day' | '1_week' | '1_month' | 'indefinite') => {
+    try {
+      const res = await pauseGoalAlerts(duration);
+      setIsAlertsPaused(res.is_paused);
+      setPausedUntil(res.paused_until || null);
+      showToast('Goal alerts paused.', 'info');
+      await loadGoalsData();
+    } catch {
+      showToast('Failed to pause goal alerts.', 'info');
+    }
+  };
 
   // Calculate live monthly suggestion for Create/Edit Modal
   const computeLiveMonthlySuggestion = () => {
@@ -256,7 +312,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   };
 
   // Open Create Goal Modal
-  const handleOpenCreateModal = () => {
+  const handleOpenCreateModal = async () => {
     setFormTitle('');
     setFormTargetAmount('');
     setFormTimeframeMode('months');
@@ -265,6 +321,23 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     setFormColor('#10B981');
     setFormIcon('target');
     setFormError('');
+    setIsAlertAccordionOpen(false);
+    setCustomMilestoneInput('');
+    setCustomMilestoneError('');
+    try {
+      const settings = await getGoalAlertSettings();
+      setCustomMilestones(settings.milestone_thresholds && settings.milestone_thresholds.length > 0 ? settings.milestone_thresholds : [25, 50, 75, 100]);
+      setCustomDeadlineReminder(settings.deadline_reminder_days !== null && settings.deadline_reminder_days !== undefined ? settings.deadline_reminder_days : 7);
+      setCustomInactivityNudge(settings.inactivity_nudge_days !== null && settings.inactivity_nudge_days !== undefined ? settings.inactivity_nudge_days : 30);
+      setCustomInApp(settings.in_app !== null && settings.in_app !== undefined ? settings.in_app : true);
+      setCustomEmail(settings.email !== null && settings.email !== undefined ? settings.email : true);
+    } catch {
+      setCustomMilestones([25, 50, 75, 100]);
+      setCustomDeadlineReminder(7);
+      setCustomInactivityNudge(30);
+      setCustomInApp(true);
+      setCustomEmail(true);
+    }
     setIsCreateModalOpen(true);
   };
 
@@ -278,7 +351,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     setFormMonths(3);
     setFormColor(goal.color || '#10B981');
     setFormIcon(goal.icon || 'target');
-    setOverrideAlerts(Boolean(goal.has_custom_alerts));
+    setIsAlertAccordionOpen(false);
     setCustomMilestones(goal.custom_milestone_thresholds && goal.custom_milestone_thresholds.length > 0 ? goal.custom_milestone_thresholds : [25, 50, 75, 100]);
     setCustomDeadlineReminder(goal.custom_deadline_reminder_days !== null && goal.custom_deadline_reminder_days !== undefined ? goal.custom_deadline_reminder_days : 7);
     setCustomInactivityNudge(goal.custom_inactivity_nudge_days !== null && goal.custom_inactivity_nudge_days !== undefined ? goal.custom_inactivity_nudge_days : 30);
@@ -313,7 +386,13 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
         months: formTimeframeMode === 'months' ? formMonths : undefined,
         deadline: formTimeframeMode === 'custom' && formDeadline ? formDeadline : undefined,
         color: formColor,
-        icon: formIcon
+        icon: formIcon,
+        has_custom_alerts: true,
+        custom_milestone_thresholds: customMilestones.length > 0 ? customMilestones : [25, 50, 75, 100],
+        custom_deadline_reminder_days: customDeadlineReminder >= 0 ? customDeadlineReminder : null,
+        custom_inactivity_nudge_days: customInactivityNudge >= 0 ? customInactivityNudge : null,
+        custom_alert_in_app: customInApp,
+        custom_alert_email: customEmail
       });
 
       setIsCreateModalOpen(false);
@@ -351,12 +430,12 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
         deadline: formTimeframeMode === 'custom' && formDeadline ? formDeadline : undefined,
         color: formColor,
         icon: formIcon,
-        has_custom_alerts: overrideAlerts,
-        custom_milestone_thresholds: overrideAlerts ? (customMilestones.length > 0 ? customMilestones : [25, 50, 75, 100]) : null,
-        custom_deadline_reminder_days: overrideAlerts ? (customDeadlineReminder >= 0 ? customDeadlineReminder : null) : null,
-        custom_inactivity_nudge_days: overrideAlerts ? (customInactivityNudge >= 0 ? customInactivityNudge : null) : null,
-        custom_alert_in_app: overrideAlerts ? customInApp : null,
-        custom_alert_email: overrideAlerts ? customEmail : null
+        has_custom_alerts: true,
+        custom_milestone_thresholds: customMilestones.length > 0 ? customMilestones : [25, 50, 75, 100],
+        custom_deadline_reminder_days: customDeadlineReminder >= 0 ? customDeadlineReminder : null,
+        custom_inactivity_nudge_days: customInactivityNudge >= 0 ? customInactivityNudge : null,
+        custom_alert_in_app: customInApp,
+        custom_alert_email: customEmail
       });
 
       setIsEditModalOpen(false);
@@ -577,24 +656,77 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => setIsAlertSettingsModalOpen(true)}
-            className="btn btn-outline"
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <PeriodCapsule periodType={periodType} periodLabel={periodLabel} />
+          {/* Pause Toggle Switch */}
+          <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '7px',
-              padding: '10px 16px',
-              fontSize: '13.5px',
-              fontWeight: 600,
+              gap: '8px',
+              padding: '7px 12px',
               borderRadius: 'var(--radius-btn)',
-              cursor: 'pointer'
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: 'var(--primary)',
             }}
           >
-            <Bell size={16} />
-            <span>Alert settings</span>
-          </button>
+            {isAlertsPaused ? (
+              <BellOff size={15} color="#F59E0B" />
+            ) : (
+              <Bell size={15} color="var(--accent)" />
+            )}
+            <span>Goal alerts</span>
+            <label
+              style={{
+                position: 'relative',
+                display: 'inline-block',
+                width: '36px',
+                height: '20px',
+                cursor: 'pointer',
+                margin: 0,
+              }}
+              title={isAlertsPaused ? 'Click to resume alerts' : 'Click to pause alerts'}
+            >
+              <input
+                type="checkbox"
+                checked={!isAlertsPaused}
+                onChange={(e) => {
+                  if (!e.target.checked) {
+                    setIsPauseModalOpen(true);
+                  } else {
+                    handleResumeAlerts();
+                  }
+                }}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: !isAlertsPaused ? 'var(--accent)' : 'var(--border)',
+                  borderRadius: '20px',
+                  transition: '0.2s ease',
+                }}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    content: '""',
+                    height: '14px',
+                    width: '14px',
+                    left: !isAlertsPaused ? '19px' : '3px',
+                    bottom: '3px',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '50%',
+                    transition: '0.2s ease',
+                  }}
+                />
+              </span>
+            </label>
+          </div>
 
           <button
             onClick={handleOpenCreateModal}
@@ -616,6 +748,50 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* TOP PAUSE BANNER */}
+      {isAlertsPaused && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 18px',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            borderRadius: '12px',
+            color: 'var(--primary)',
+            fontSize: '13px',
+            fontWeight: 500,
+            gap: '12px',
+            flexWrap: 'wrap',
+            marginBottom: '20px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <BellOff size={16} color="#F59E0B" style={{ flexShrink: 0 }} />
+            <span>
+              {pausedUntil
+                ? `Goal alerts are paused until ${new Date(pausedUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`
+                : 'Goal alerts are paused.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleResumeAlerts}
+            className="btn btn-outline"
+            style={{
+              padding: '5px 12px',
+              fontSize: '12.5px',
+              borderColor: '#F59E0B',
+              color: '#F59E0B',
+              fontWeight: 600,
+            }}
+          >
+            Resume
+          </button>
+        </div>
+      )}
 
       {/* 3. SUMMARY KPI CARDS */}
       <div style={{
@@ -809,16 +985,9 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                         {renderGoalIcon(goal.icon, 22, goalColor)}
                       </div>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', margin: 0, lineHeight: 1.2 }}>
-                            {goal.title}
-                          </h3>
-                          {goal.has_custom_alerts && (
-                            <span title="Custom alerts enabled for this goal" style={{ display: 'inline-flex', color: 'var(--accent)' }}>
-                              <Bell size={14} />
-                            </span>
-                          )}
-                        </div>
+                        <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', margin: 0, lineHeight: 1.2 }}>
+                          {goal.title}
+                        </h3>
                         <div style={{ fontSize: '12px', color: 'var(--secondary-text)', marginTop: '2px' }}>
                           Target: <b>{formatINR(goal.target_amount)}</b>
                         </div>
@@ -938,6 +1107,55 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                       </button>
                     </div>
                   )}
+
+                  {/* Card-level Alert Summary Bell Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedGoalForAlerts(goal);
+                      setIsAlertSettingsModalOpen(true);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      border: isAlertsPaused ? '1px dashed var(--border)' : '1px solid rgba(16, 185, 129, 0.25)',
+                      backgroundColor: isAlertsPaused ? 'var(--card-subtle)' : 'rgba(16, 185, 129, 0.08)',
+                      color: isAlertsPaused ? 'var(--secondary-text)' : 'var(--accent)',
+                      fontSize: '11.5px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      width: '100%',
+                      marginBottom: '12px',
+                      textAlign: 'left',
+                      transition: '0.15s ease',
+                    }}
+                    title="Click to view and edit alert settings for this goal"
+                  >
+                    {isAlertsPaused ? (
+                      <BellOff size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
+                    ) : (
+                      <Bell size={13} style={{ flexShrink: 0 }} />
+                    )}
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        opacity: isAlertsPaused ? 0.75 : 1,
+                      }}
+                    >
+                      {formatGoalCardBellSummary(
+                        goal.custom_milestone_thresholds,
+                        goal.custom_alert_in_app,
+                        goal.custom_alert_email,
+                        isAlertsPaused
+                      )}
+                    </span>
+                  </button>
                 </div>
 
                 {/* Bottom Actions Row: 2-Tap Quick Add Money Button & Details */}
@@ -1217,242 +1435,244 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                 </div>
               </div>
 
-              {/* Alert Settings Override (When Editing Goal) */}
-              {isEditModalOpen && (
-                <div style={{
-                  padding: '14px',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--card-subtle)',
-                  border: '1px solid var(--border)',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                    <Bell size={16} color="var(--accent)" />
+              {/* Alert Settings Accordion (Collapsed by default, on both Create and Edit) */}
+              <div style={{
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--card-subtle)',
+                marginBottom: '20px',
+                overflow: 'hidden'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setIsAlertAccordionOpen(!isAlertAccordionOpen)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    padding: '12px 14px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Bell size={15} color="var(--accent)" />
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
-                      Alert Notifications
+                      Alert settings
                     </span>
                   </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: overrideAlerts ? '14px' : '0px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--main-text)' }}>
-                      <input
-                        type="radio"
-                        name="goalAlertMode"
-                        checked={!overrideAlerts}
-                        onChange={() => setOverrideAlerts(false)}
-                        style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                      />
-                      <span>Use my default alert settings</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--main-text)' }}>
-                      <input
-                        type="radio"
-                        name="goalAlertMode"
-                        checked={overrideAlerts}
-                        onChange={() => setOverrideAlerts(true)}
-                        style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                      />
-                      <span>Set custom alerts for this goal</span>
-                    </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--secondary-text)', fontSize: '12px' }}>
+                    <span>{customMilestones.join(', ')}%</span>
+                    {isAlertAccordionOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                   </div>
+                </button>
 
-                  {overrideAlerts && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-                      {/* Milestone Alerts */}
-                      <div>
-                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                          Milestone alerts (% achieved):
-                        </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                          {QUICK_MILESTONES.map((m) => {
-                            const isSel = customMilestones.includes(m);
-                            return (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => toggleCustomMilestone(m)}
-                                style={{
-                                  padding: '4px 10px',
-                                  borderRadius: '999px',
-                                  border: isSel ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                                  backgroundColor: isSel ? 'var(--light-accent)' : 'var(--card-box)',
-                                  color: isSel ? 'var(--accent)' : 'var(--main-text)',
-                                  fontSize: '11.5px',
-                                  fontWeight: isSel ? 700 : 500,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                {m}%
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Custom milestone input */}
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            placeholder="Custom % (1-100)"
-                            value={customMilestoneInput}
-                            onChange={(e) => setCustomMilestoneInput(e.target.value)}
-                            className="input-field"
-                            style={{ height: '32px', fontSize: '12px', flex: 1, padding: '4px 8px' }}
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddCustomMilestone}
-                            disabled={!customMilestoneInput}
-                            className="btn btn-outline"
-                            style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}
-                          >
-                            Add
-                          </button>
-                        </div>
-
-                        {customMilestoneError && (
-                          <div style={{ fontSize: '11.5px', color: 'var(--danger)', marginBottom: '6px' }}>
-                            {customMilestoneError}
-                          </div>
-                        )}
-
-                        {/* Selected chips */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                          {customMilestones.map((m) => (
-                            <span
+                {isAlertAccordionOpen && (
+                  <div style={{
+                    padding: '0 14px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                    borderTop: '1px solid var(--border)',
+                    paddingTop: '12px'
+                  }}>
+                    {/* Milestone alerts */}
+                    <div>
+                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                        Milestone alerts (% achieved):
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                        {QUICK_MILESTONES.map((m) => {
+                          const isSel = customMilestones.includes(m);
+                          return (
+                            <button
                               key={m}
+                              type="button"
+                              onClick={() => toggleCustomMilestone(m)}
                               style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '2px 7px',
-                                borderRadius: '4px',
-                                backgroundColor: 'var(--card-box)',
-                                border: '1px solid var(--accent)',
-                                color: 'var(--accent)',
+                                padding: '4px 10px',
+                                borderRadius: '999px',
+                                border: isSel ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                                backgroundColor: isSel ? 'var(--light-accent)' : 'var(--card-box)',
+                                color: isSel ? 'var(--accent)' : 'var(--main-text)',
                                 fontSize: '11.5px',
-                                fontWeight: 600
+                                fontWeight: isSel ? 700 : 500,
+                                cursor: 'pointer',
                               }}
                             >
                               {m}%
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveCustomMilestone(m)}
-                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--secondary-text)' }}
-                              >
-                                <X size={10} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Deadline reminders */}
-                      <div>
-                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                          Deadline reminders:
-                        </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {DEADLINE_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setCustomDeadlineReminder(opt.value)}
-                              style={{
-                                padding: '4px 10px',
-                                borderRadius: '6px',
-                                border: customDeadlineReminder === opt.value ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                                backgroundColor: customDeadlineReminder === opt.value ? 'var(--light-accent)' : 'var(--card-box)',
-                                color: customDeadlineReminder === opt.value ? 'var(--accent)' : 'var(--main-text)',
-                                fontSize: '11.5px',
-                                fontWeight: customDeadlineReminder === opt.value ? 700 : 500,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {opt.label}
                             </button>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
 
-                      {/* Inactivity nudge */}
-                      <div>
-                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                          Inactivity nudge:
-                        </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {INACTIVITY_OPTIONS.map((opt) => (
+                      {/* Custom milestone input */}
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          placeholder="Custom % (1-100)"
+                          value={customMilestoneInput}
+                          onChange={(e) => setCustomMilestoneInput(e.target.value)}
+                          className="input-field"
+                          style={{ height: '32px', fontSize: '12px', flex: 1, padding: '4px 8px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomMilestone}
+                          disabled={!customMilestoneInput}
+                          className="btn btn-outline"
+                          style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      {customMilestoneError && (
+                        <div style={{ fontSize: '11.5px', color: 'var(--danger)', marginBottom: '6px' }}>
+                          {customMilestoneError}
+                        </div>
+                      )}
+
+                      {/* Selected chips */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {customMilestones.map((m) => (
+                          <span
+                            key={m}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              backgroundColor: 'var(--card-box)',
+                              border: '1px solid var(--accent)',
+                              color: 'var(--accent)',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {m}%
                             <button
-                              key={opt.value}
                               type="button"
-                              onClick={() => setCustomInactivityNudge(opt.value)}
-                              style={{
-                                padding: '4px 10px',
-                                borderRadius: '6px',
-                                border: customInactivityNudge === opt.value ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                                backgroundColor: customInactivityNudge === opt.value ? 'var(--light-accent)' : 'var(--card-box)',
-                                color: customInactivityNudge === opt.value ? 'var(--accent)' : 'var(--main-text)',
-                                fontSize: '11.5px',
-                                fontWeight: customInactivityNudge === opt.value ? 700 : 500,
-                                cursor: 'pointer'
-                              }}
+                              onClick={() => handleRemoveCustomMilestone(m)}
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--secondary-text)' }}
                             >
-                              {opt.label}
+                              <X size={10} />
                             </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* How to be told */}
-                      <div>
-                        <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
-                          How to be told:
-                        </span>
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', color: 'var(--main-text)' }}>
-                            <input
-                              type="checkbox"
-                              checked={customInApp}
-                              onChange={(e) => setCustomInApp(e.target.checked)}
-                              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                            />
-                            In-app notification
-                          </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', color: 'var(--main-text)' }}>
-                            <input
-                              type="checkbox"
-                              checked={customEmail}
-                              onChange={(e) => setCustomEmail(e.target.checked)}
-                              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                            />
-                            Email
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Preview / Gentle warning */}
-                      <div style={{
-                        padding: '8px 10px',
-                        borderRadius: '6px',
-                        backgroundColor: (!customInApp && !customEmail) ? 'var(--light-danger)' : 'var(--light-accent)',
-                        color: (!customInApp && !customEmail) ? 'var(--danger)' : 'var(--accent)',
-                        fontSize: '11.5px',
-                        lineHeight: '1.4'
-                      }}>
-                        {formatGoalAlertPreview(
-                          customMilestones,
-                          customDeadlineReminder >= 0 ? customDeadlineReminder : null,
-                          customInactivityNudge >= 0 ? customInactivityNudge : null,
-                          customInApp,
-                          customEmail,
-                          true
-                        )}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {/* Deadline reminders */}
+                    <div>
+                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                        Deadline reminders:
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {DEADLINE_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setCustomDeadlineReminder(opt.value)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: customDeadlineReminder === opt.value ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                              backgroundColor: customDeadlineReminder === opt.value ? 'var(--light-accent)' : 'var(--card-box)',
+                              color: customDeadlineReminder === opt.value ? 'var(--accent)' : 'var(--main-text)',
+                              fontSize: '11.5px',
+                              fontWeight: customDeadlineReminder === opt.value ? 700 : 500,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Inactivity nudge */}
+                    <div>
+                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                        Inactivity nudge:
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {INACTIVITY_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setCustomInactivityNudge(opt.value)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: customInactivityNudge === opt.value ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                              backgroundColor: customInactivityNudge === opt.value ? 'var(--light-accent)' : 'var(--card-box)',
+                              color: customInactivityNudge === opt.value ? 'var(--accent)' : 'var(--main-text)',
+                              fontSize: '11.5px',
+                              fontWeight: customInactivityNudge === opt.value ? 700 : 500,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* How to be told */}
+                    <div>
+                      <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                        How to be told:
+                      </span>
+                      <div style={{ display: 'flex', gap: '16px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', color: 'var(--main-text)' }}>
+                          <input
+                            type="checkbox"
+                            checked={customInApp}
+                            onChange={(e) => setCustomInApp(e.target.checked)}
+                            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                          />
+                          In-app notification
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', color: 'var(--main-text)' }}>
+                          <input
+                            type="checkbox"
+                            checked={customEmail}
+                            onChange={(e) => setCustomEmail(e.target.checked)}
+                            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                          />
+                          Email
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Preview / Gentle warning */}
+                    <div style={{
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: (!customInApp && !customEmail) ? 'var(--light-danger)' : 'var(--light-accent)',
+                      color: (!customInApp && !customEmail) ? 'var(--danger)' : 'var(--accent)',
+                      fontSize: '11.5px',
+                      lineHeight: '1.4'
+                    }}>
+                      {formatGoalAlertPreview(
+                        customMilestones,
+                        customDeadlineReminder >= 0 ? customDeadlineReminder : null,
+                        customInactivityNudge >= 0 ? customInactivityNudge : null,
+                        customInApp,
+                        customEmail,
+                        true
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
@@ -1925,11 +2145,27 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
         </div>
       )}
 
-      {/* 8. MODAL: GOAL ALERT SETTINGS */}
+      {/* 8. MODAL: GOAL ALERT SETTINGS (CARD-LEVEL) */}
       <GoalAlertSettingsModal
         isOpen={isAlertSettingsModalOpen}
-        onClose={() => setIsAlertSettingsModalOpen(false)}
-        onSaved={loadGoalsData}
+        onClose={() => {
+          setIsAlertSettingsModalOpen(false);
+          setSelectedGoalForAlerts(null);
+        }}
+        goal={selectedGoalForAlerts}
+        isPagePaused={isAlertsPaused}
+        onSaved={() => {
+          loadGoalsData();
+          if (onRefreshNotifications) onRefreshNotifications();
+        }}
+      />
+
+      {/* 9. MODAL: PAUSE GOAL ALERTS */}
+      <PauseAlertsModal
+        isOpen={isPauseModalOpen}
+        onClose={() => setIsPauseModalOpen(false)}
+        onConfirm={handleConfirmPause}
+        type="goal"
       />
 
     </div>

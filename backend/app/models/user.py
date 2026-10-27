@@ -34,6 +34,12 @@ class User(Base):
     goal_alert_in_app = Column(Boolean, nullable=False, default=True)
     goal_alert_email = Column(Boolean, nullable=False, default=True)
 
+    # Alert Pause States
+    budget_alerts_paused = Column(Boolean, nullable=False, default=False)
+    budget_alerts_paused_until = Column(DateTime(timezone=True), nullable=True)
+    goal_alerts_paused = Column(Boolean, nullable=False, default=False)
+    goal_alerts_paused_until = Column(DateTime(timezone=True), nullable=True)
+
     # Help & Onboarding checklist
     viewed_analytics = Column(Boolean, nullable=False, default=False)
     help_checklist_dismissed = Column(Boolean, nullable=False, default=False)
@@ -49,6 +55,24 @@ class User(Base):
     @property
     def is_admin(self) -> bool:
         return self.role == 'ADMIN'
+
+    def is_budget_alerts_paused(self, now=None) -> bool:
+        if not self.budget_alerts_paused:
+            return False
+        if self.budget_alerts_paused_until is None:
+            return True
+        from datetime import datetime, timezone
+        curr = now or datetime.now(timezone.utc)
+        return self.budget_alerts_paused_until > curr
+
+    def is_goal_alerts_paused(self, now=None) -> bool:
+        if not self.goal_alerts_paused:
+            return False
+        if self.goal_alerts_paused_until is None:
+            return True
+        from datetime import datetime, timezone
+        curr = now or datetime.now(timezone.utc)
+        return self.goal_alerts_paused_until > curr
 
 
 class PasswordReset(Base):

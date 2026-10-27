@@ -68,20 +68,15 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Rules checklist
-  const ruleLength = newPassword.length >= 8;
-  const ruleNumber = /\d/.test(newPassword);
-  const ruleUppercase = /[A-Z]/.test(newPassword);
-  const ruleSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
-  const allRulesMet = ruleLength && ruleNumber && ruleUppercase && ruleSpecial;
+  // Constraint: At least 6 characters long (like registration & forgot password)
+  const allRulesMet = newPassword.length >= 6;
   const isMatching = confirmPassword.length > 0 && newPassword === confirmPassword;
   const isButtonDisabled = !currentPassword || !newPassword || !confirmPassword || !allRulesMet || !isMatching || updating;
 
-  // "Comes and goes" logic: show checklist only when new password is focused, disappears when focus leaves
+  // "Comes and goes" logic: show rule only when new password is focused, disappears when focus leaves
   const showRules = isNewFocused;
 
-  // Strength calculation
-  const rulesPassedCount = (ruleLength ? 1 : 0) + (ruleNumber ? 1 : 0) + (ruleUppercase ? 1 : 0) + (ruleSpecial ? 1 : 0);
+  // Strength calculation based on length
   let strengthLabel = 'Weak';
   let strengthColor = '#EF4444';
   let strengthPercent = 33;
@@ -89,11 +84,11 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     strengthLabel = 'None';
     strengthColor = 'var(--border)';
     strengthPercent = 0;
-  } else if (rulesPassedCount >= 4) {
+  } else if (newPassword.length >= 10) {
     strengthLabel = 'Strong';
     strengthColor = 'var(--accent)';
     strengthPercent = 100;
-  } else if (rulesPassedCount === 3) {
+  } else if (newPassword.length >= 6) {
     strengthLabel = 'Fair';
     strengthColor = '#F59E0B';
     strengthPercent = 66;
@@ -111,7 +106,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     if (!newPassword) {
       errors.new = 'Please enter a new password.';
     } else if (!allRulesMet) {
-      errors.new = 'New password does not meet all requirement rules.';
+      errors.new = 'Password must be at least 6 characters long.';
     } else if (newPassword === currentPassword) {
       errors.new = 'New password cannot be the same as your current password.';
     }
@@ -441,7 +436,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                     paddingRight: '38px',
                     borderColor: fieldErrors.new ? '#EF4444' : undefined
                   }}
-                  placeholder="Enter new password"
+                  placeholder="At least 6 characters"
                   required
                 />
                 <button
@@ -502,46 +497,38 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 </div>
               )}
 
-              {/* "Comes and goes" Rules Checklist: Smoothly appears when focused or typing, and disappears when not needed */}
+              {/* "Comes and goes" Rule: Smoothly appears when focused or typing, and disappears when not needed */}
               {showRules && (
                 <div
                   aria-live="polite"
                   style={{
                     marginTop: '8px',
-                    padding: '10px 12px',
+                    padding: '8px 12px',
                     backgroundColor: 'var(--card-subtle)',
                     borderRadius: '8px',
                     border: '1px solid var(--border)',
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: '6px',
                     animation: 'fadeIn 0.15s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: ruleLength ? 'var(--accent)' : 'var(--secondary-text)' }}>
-                    {ruleLength ? <CheckCircle2 size={13} color="var(--accent)" /> : <div style={{ width: 13, height: 13, borderRadius: '50%', border: '1px solid var(--border)', display: 'inline-block' }} />}
-                    <span style={{ fontWeight: ruleLength ? 600 : 400 }}>At least 8 characters</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: ruleNumber ? 'var(--accent)' : 'var(--secondary-text)' }}>
-                    {ruleNumber ? <CheckCircle2 size={13} color="var(--accent)" /> : <div style={{ width: 13, height: 13, borderRadius: '50%', border: '1px solid var(--border)', display: 'inline-block' }} />}
-                    <span style={{ fontWeight: ruleNumber ? 600 : 400 }}>At least 1 number (0-9)</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: ruleUppercase ? 'var(--accent)' : 'var(--secondary-text)' }}>
-                    {ruleUppercase ? <CheckCircle2 size={13} color="var(--accent)" /> : <div style={{ width: 13, height: 13, borderRadius: '50%', border: '1px solid var(--border)', display: 'inline-block' }} />}
-                    <span style={{ fontWeight: ruleUppercase ? 600 : 400 }}>At least 1 uppercase letter</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: ruleSpecial ? 'var(--accent)' : 'var(--secondary-text)' }}>
-                    {ruleSpecial ? <CheckCircle2 size={13} color="var(--accent)" /> : <div style={{ width: 13, height: 13, borderRadius: '50%', border: '1px solid var(--border)', display: 'inline-block' }} />}
-                    <span style={{ fontWeight: ruleSpecial ? 600 : 400 }}>At least 1 special symbol</span>
-                  </div>
+                  {allRulesMet ? (
+                    <CheckCircle2 size={13} color="var(--accent)" />
+                  ) : (
+                    <div style={{ width: 13, height: 13, borderRadius: '50%', border: '1px solid var(--border)', display: 'inline-block' }} />
+                  )}
+                  <span style={{ fontSize: '11.5px', color: allRulesMet ? 'var(--accent)' : 'var(--secondary-text)', fontWeight: allRulesMet ? 600 : 400 }}>
+                    At least 6 characters
+                  </span>
                 </div>
               )}
 
-              {/* When all rules met and not focused, show compact 1-line confirmation */}
+              {/* When rule is met and not focused, show compact 1-line confirmation */}
               {!showRules && allRulesMet && (
                 <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--accent)', fontSize: '11.5px', fontWeight: 600 }}>
                   <Check size={13} />
-                  <span>Meets all password requirements</span>
+                  <span>At least 6 characters</span>
                 </div>
               )}
             </div>

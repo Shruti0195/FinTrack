@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
+import { PeriodCapsule } from '../components/PeriodCapsule';
 import type { PeriodType } from '../components/PeriodFilterDropdown';
 
 export interface IncomeCategory {
@@ -780,6 +781,8 @@ export const IncomePage: React.FC<IncomePageProps> = ({
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <PeriodCapsule periodType={periodType} periodLabel={activePeriodLabel} />
+
           {/* Export Dropdown Menu (CSV or PDF) */}
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button
