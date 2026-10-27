@@ -211,7 +211,7 @@ export const PeriodFilterDropdown: React.FC<PeriodFilterDropdownProps> = ({
           {periodType === 'monthly' && (
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--secondary-text)', marginBottom: '8px' }}>
-                Select Month (4x3 Grid)
+                Select Month
               </div>
               <div style={{
                 display: 'grid',

@@ -2,6 +2,7 @@ import os
 import io
 import re
 import calendar
+import pypdf
 from datetime import date, datetime, timedelta
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
@@ -836,17 +837,15 @@ def generate_pdf_report(
             else:
                 summary_sentences.append(f"You stayed within {kept_b} of {tot_b} budgets ({over_b} over limit).")
 
-    # Sentence 5: Goals
+    # Sentence 5: Goals (Requirement 1)
+    # Replace "You contributed ₹X toward your active goals." with:
+    # "You added ₹X to your goals. Goal money is tracked separately and is not counted as an expense."
+    # If nothing was added in the period, leave the sentence out.
     if goals_summary and len(goals_summary["goals"]) > 0:
-        num_goals = len(goals_summary["goals"])
         g_contrib = goals_summary["total_added_period"]
         if g_contrib > 0:
             summary_sentences.append(
-                f"You contributed {format_indian_currency(g_contrib)} toward your active goals."
-            )
-        else:
-            summary_sentences.append(
-                f"You have {num_goals} active savings {'goal' if num_goals == 1 else 'goals'} in progress."
+                f"You added {format_indian_currency(g_contrib)} to your goals. Goal money is tracked separately and is not counted as an expense."
             )
 
     summary_text = " ".join(summary_sentences[:5])
@@ -971,530 +970,594 @@ def generate_pdf_report(
         leading=11,
         textColor=colors.HexColor("#64748B")
     )
-
-    story = []
-
-    # 1. Header (Part 2, Item 5 & Part 3, Item 10)
-    user_display_name = user.name or "FinTrack User"
-    generated_date_str = format_readable_date(today_dt)
-
-    header_left = [
-        Paragraph("FinTrack Financial Report", style_main_title),
-        Paragraph(period_subtitle, style_period_line),
-    ]
-    header_right = [
-        Paragraph(f"<b>Prepared for:</b> {format_script_html(user_display_name)}", style_meta_right),
-        Paragraph(f"<b>Date generated:</b> {generated_date_str}", style_meta_right),
-    ]
-
-    header_table = Table([[header_left, header_right]], colWidths=[330, 210])
-    header_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.75, colors.HexColor("#E2E8F0")),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
-    story.append(header_table)
-    story.append(Spacer(1, 6))
-
-    # 2. Executive Written Summary Callout Box
-    summary_box = Table(
-        [[Paragraph(f"<b>Executive Summary:</b> {format_script_html(summary_text)}", style_summary_text)]],
-        colWidths=[540]
+    style_goal_note = ParagraphStyle(
+        "FTGoalNote",
+        parent=styles["Normal"],
+        fontName=font_main,
+        fontSize=7.2,
+        leading=9.5,
+        textColor=colors.HexColor("#64748B")
     )
-    summary_box.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ("LINELEFT", (0, 0), (0, -1), 3.5, colors.HexColor("#10B981")),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    story.append(summary_box)
-    story.append(Spacer(1, 7))
+    style_key_title = ParagraphStyle(
+        "FTKeyTitle",
+        parent=styles["Normal"],
+        fontName=font_bold,
+        fontSize=7.2,
+        leading=9.5,
+        textColor=colors.HexColor("#475569")
+    )
+    style_key_item = ParagraphStyle(
+        "FTKeyItem",
+        parent=styles["Normal"],
+        fontName=font_main,
+        fontSize=6.8,
+        leading=9,
+        textColor=colors.HexColor("#64748B")
+    )
 
-    # 3. Comparison Cards (Part 1, Item 3 & Part 2, Item 7)
-    # Income Subtitle
-    if prev_income == 0:
-        inc_sub_html = f"vs {prev_period_name}: ₹0, New"
-    else:
-        inc_diff = total_income - prev_income
-        inc_pct = abs((inc_diff / prev_income) * 100.0)
-        if inc_diff > 0:
-            inc_sub_html = f'<font color="#10B981"><b>▲ up {inc_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_income)}'
-        elif inc_diff < 0:
-            inc_sub_html = f'<font color="#EF4444"><b>▼ down {inc_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_income)}'
+    def _build_story(include_key: bool):
+        story = []
+
+        # 1. Header (Part 2, Item 5 & Part 3, Item 10)
+        user_display_name = user.name or "FinTrack User"
+        generated_date_str = format_readable_date(today_dt)
+
+        header_left = [
+            Paragraph("FinTrack Financial Report", style_main_title),
+            Paragraph(period_subtitle, style_period_line),
+        ]
+        header_right = [
+            Paragraph(f"<b>Prepared for:</b> {format_script_html(user_display_name)}", style_meta_right),
+            Paragraph(f"<b>Date generated:</b> {generated_date_str}", style_meta_right),
+        ]
+
+        header_table = Table([[header_left, header_right]], colWidths=[330, 210])
+        header_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.75, colors.HexColor("#E2E8F0")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(header_table)
+        story.append(Spacer(1, 6))
+
+        # 2. Executive Written Summary Callout Box
+        summary_box = Table(
+            [[Paragraph(f"<b>Executive Summary:</b> {format_script_html(summary_text)}", style_summary_text)]],
+            colWidths=[540]
+        )
+        summary_box.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("LINELEFT", (0, 0), (0, -1), 3.5, colors.HexColor("#10B981")),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        story.append(summary_box)
+        story.append(Spacer(1, 7))
+
+        # 3. Comparison Cards (Part 1, Item 3 & Part 2, Item 7)
+        # Income Subtitle
+        if prev_income == 0:
+            inc_sub_html = f"vs {prev_period_name}: ₹0, New"
         else:
-            inc_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_income)}'
-
-    # Expenses Subtitle (Expenses DOWN is GOOD/GREEN, Expenses UP is BAD/RED)
-    if prev_expenses == 0:
-        exp_sub_html = f"vs {prev_period_name}: ₹0, New"
-    else:
-        exp_diff = total_expenses - prev_expenses
-        exp_pct = abs((exp_diff / prev_expenses) * 100.0)
-        if exp_diff > 0:
-            exp_sub_html = f'<font color="#EF4444"><b>▲ up {exp_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_expenses)}'
-        elif exp_diff < 0:
-            exp_sub_html = f'<font color="#10B981"><b>▼ down {exp_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_expenses)}'
-        else:
-            exp_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_expenses)}'
-
-    # Savings Subtitle
-    if prev_income == 0 and prev_expenses == 0:
-        sav_sub_html = f"vs {prev_period_name}: ₹0, New"
-    else:
-        sav_diff = net_savings - prev_savings
-        if prev_savings != 0:
-            sav_pct = abs((sav_diff / abs(prev_savings)) * 100.0)
-            if sav_diff > 0:
-                sav_sub_html = f'<font color="#10B981"><b>▲ up {sav_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
-            elif sav_diff < 0:
-                sav_sub_html = f'<font color="#EF4444"><b>▼ down {sav_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+            inc_diff = total_income - prev_income
+            inc_pct = abs((inc_diff / prev_income) * 100.0)
+            if inc_diff > 0:
+                inc_sub_html = f'<font color="#10B981"><b>▲ up {inc_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_income)}'
+            elif inc_diff < 0:
+                inc_sub_html = f'<font color="#EF4444"><b>▼ down {inc_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_income)}'
             else:
-                sav_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+                inc_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_income)}'
+
+        # Expenses Subtitle (Expenses DOWN is GOOD/GREEN, Expenses UP is BAD/RED)
+        if prev_expenses == 0:
+            exp_sub_html = f"vs {prev_period_name}: ₹0, New"
         else:
-            if sav_diff > 0:
-                sav_sub_html = f'<font color="#10B981"><b>▲ up</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
-            elif sav_diff < 0:
-                sav_sub_html = f'<font color="#EF4444"><b>▼ down</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+            exp_diff = total_expenses - prev_expenses
+            exp_pct = abs((exp_diff / prev_expenses) * 100.0)
+            if exp_diff > 0:
+                exp_sub_html = f'<font color="#EF4444"><b>▲ up {exp_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_expenses)}'
+            elif exp_diff < 0:
+                exp_sub_html = f'<font color="#10B981"><b>▼ down {exp_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_expenses)}'
             else:
-                sav_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+                exp_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_expenses)}'
 
-    # Savings Rate Subtitle
-    if prev_income > 0:
-        sr_diff = savings_rate_pct - prev_sr_pct
-        if sr_diff > 0:
-            sr_sub_html = f'<font color="#10B981"><b>▲ +{abs(sr_diff):.1f}% pts</b></font><br/>vs {prev_period_name} ({prev_sr_pct:.1f}%)'
-        elif sr_diff < 0:
-            sr_sub_html = f'<font color="#EF4444"><b>▼ -{abs(sr_diff):.1f}% pts</b></font><br/>vs {prev_period_name} ({prev_sr_pct:.1f}%)'
+        # Savings Subtitle
+        if prev_income == 0 and prev_expenses == 0:
+            sav_sub_html = f"vs {prev_period_name}: ₹0, New"
         else:
-            sr_sub_html = f'<font color="#64748B"><b>0.0% pts (no change)</b></font><br/>vs {prev_period_name} ({prev_sr_pct:.1f}%)'
-    else:
-        sr_sub_html = f"vs {prev_period_name}: New"
-
-    kpi_col_w = 135
-    kpi_card_data = [
-        [
-            Paragraph("TOTAL INCOME", style_kpi_th),
-            Paragraph("TOTAL EXPENSES", style_kpi_th),
-            Paragraph("NET SAVINGS", style_kpi_th),
-            Paragraph("SAVINGS RATE", style_kpi_th),
-        ],
-        [
-            Paragraph(format_indian_currency(total_income), style_kpi_val),
-            Paragraph(format_indian_currency(total_expenses), style_kpi_val),
-            Paragraph(format_indian_currency(net_savings), style_kpi_val),
-            Paragraph(sr_formatted_str, style_kpi_val),
-        ],
-        [
-            Paragraph(inc_sub_html, style_kpi_sub),
-            Paragraph(exp_sub_html, style_kpi_sub),
-            Paragraph(sav_sub_html, style_kpi_sub),
-            Paragraph(sr_sub_html, style_kpi_sub),
-        ]
-    ]
-
-    kpi_table = Table(kpi_card_data, colWidths=[kpi_col_w, kpi_col_w, kpi_col_w, kpi_col_w])
-    kpi_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
-        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E2E8F0")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story.append(kpi_table)
-    story.append(Spacer(1, 6))
-
-    # 4. Six-Month Mini Bar Chart (Part 3, Item 11)
-    chart_drawing = build_six_month_chart_drawing(six_month_trends)
-    story.append(chart_drawing)
-    story.append(Spacer(1, 7))
-
-    # 5. Financial Health Score Section (Part 1, Item 4)
-    score_display = f"{health_score_data.score}/100" if health_score_data.score is not None else "-- / 100"
-
-    score_left = [
-        Paragraph("Financial Health Score", style_section_title),
-        Paragraph(f'<font size="14" color="#10B981"><b>{score_display}</b></font> • <b>{status_word}</b>', style_period_line),
-        Spacer(1, 2),
-    ]
-    if health_score_data.factors_calculated_count < 4 and health_score_data.score is not None:
-        score_left.append(Paragraph(f"Based on {health_score_data.factors_calculated_count} of 4 factors (scaled to 100).", style_td_muted))
-    score_left.append(Paragraph(data_basis_line, style_td_muted))
-
-    factor_rows = []
-    if health_score_data.factors:
-        for f in health_score_data.factors:
-            if f.is_calculated:
-                pts_str = f"<b>{f.earned_points:.0f}</b> / {f.max_points:.0f} pts"
+            sav_diff = net_savings - prev_savings
+            if prev_savings != 0:
+                sav_pct = abs((sav_diff / abs(prev_savings)) * 100.0)
+                if sav_diff > 0:
+                    sav_sub_html = f'<font color="#10B981"><b>▲ up {sav_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+                elif sav_diff < 0:
+                    sav_sub_html = f'<font color="#EF4444"><b>▼ down {sav_pct:.1f}%</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+                else:
+                    sav_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
             else:
-                pts_str = f"<font color='#94A3B8'>Not calculated ({f.not_calculated_reason or 'No data'})</font>"
-            factor_rows.append([
-                Paragraph(f.name, style_td),
-                Paragraph(pts_str, style_td)
-            ])
-    else:
-        factor_rows = [
-            [Paragraph("Savings Rate (35 max)", style_td), Paragraph("Pending data", style_td_muted)],
-            [Paragraph("Budget Adherence (30 max)", style_td), Paragraph("Pending data", style_td_muted)],
-            [Paragraph("Expense Stability (20 max)", style_td), Paragraph("Pending data", style_td_muted)],
-            [Paragraph("Essential vs Non-essential (15 max)", style_td), Paragraph("Pending data", style_td_muted)],
+                if sav_diff > 0:
+                    sav_sub_html = f'<font color="#10B981"><b>▲ up</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+                elif sav_diff < 0:
+                    sav_sub_html = f'<font color="#EF4444"><b>▼ down</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+                else:
+                    sav_sub_html = f'<font color="#64748B"><b>0.0% (no change)</b></font><br/>vs {prev_period_name}: {format_indian_currency(prev_savings)}'
+
+        # Savings Rate Subtitle
+        if prev_income > 0:
+            sr_diff = savings_rate_pct - prev_sr_pct
+            if sr_diff > 0:
+                sr_sub_html = f'<font color="#10B981"><b>▲ +{abs(sr_diff):.1f}% pts</b></font><br/>vs {prev_period_name} ({prev_sr_pct:.1f}%)'
+            elif sr_diff < 0:
+                sr_sub_html = f'<font color="#EF4444"><b>▼ -{abs(sr_diff):.1f}% pts</b></font><br/>vs {prev_period_name} ({prev_sr_pct:.1f}%)'
+            else:
+                sr_sub_html = f'<font color="#64748B"><b>0.0% pts (no change)</b></font><br/>vs {prev_period_name} ({prev_sr_pct:.1f}%)'
+        else:
+            sr_sub_html = f"vs {prev_period_name}: New"
+
+        kpi_col_w = 135
+        kpi_card_data = [
+            [
+                Paragraph("TOTAL INCOME", style_kpi_th),
+                Paragraph("TOTAL EXPENSES", style_kpi_th),
+                Paragraph("NET SAVINGS", style_kpi_th),
+                Paragraph("SAVINGS RATE", style_kpi_th),
+            ],
+            [
+                Paragraph(format_indian_currency(total_income), style_kpi_val),
+                Paragraph(format_indian_currency(total_expenses), style_kpi_val),
+                Paragraph(format_indian_currency(net_savings), style_kpi_val),
+                Paragraph(sr_formatted_str, style_kpi_val),
+            ],
+            [
+                Paragraph(inc_sub_html, style_kpi_sub),
+                Paragraph(exp_sub_html, style_kpi_sub),
+                Paragraph(sav_sub_html, style_kpi_sub),
+                Paragraph(sr_sub_html, style_kpi_sub),
+            ]
         ]
 
-    factors_subtable = Table(factor_rows, colWidths=[175, 145])
-    factors_subtable.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-    ]))
+        kpi_table = Table(kpi_card_data, colWidths=[kpi_col_w, kpi_col_w, kpi_col_w, kpi_col_w])
+        kpi_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E2E8F0")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(kpi_table)
+        story.append(Spacer(1, 6))
 
-    health_card_table = Table([[score_left, factors_subtable]], colWidths=[210, 330])
-    health_card_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFFFF")),
-        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E2E8F0")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    story.append(health_card_table)
-    story.append(Spacer(1, 6))
+        # 4. Six-Month Mini Bar Chart (Part 3, Item 11)
+        chart_drawing = build_six_month_chart_drawing(six_month_trends)
+        story.append(chart_drawing)
+        story.append(Spacer(1, 7))
 
-    # 6. Where the Money Went (Top Expense Categories)
-    story.append(Paragraph("Where the Money Went (Expense Allocations)", style_section_title))
+        # 5. Financial Health Score Section (Part 1, Item 4)
+        score_display = f"{health_score_data.score}/100" if health_score_data.score is not None else "-- / 100"
 
-    cat_table_data = [
-        [
-            Paragraph("Category", style_th),
-            Paragraph("Amount", style_th),
-            Paragraph("Share", style_th),
-            Paragraph("Distribution", style_th),
+        score_left = [
+            Paragraph("Financial Health Score", style_section_title),
+            Paragraph(f'<font size="14" color="#10B981"><b>{score_display}</b></font> • <b>{status_word}</b>', style_period_line),
+            Spacer(1, 2),
         ]
-    ]
+        if health_score_data.factors_calculated_count < 4 and health_score_data.score is not None:
+            score_left.append(Paragraph(f"Based on {health_score_data.factors_calculated_count} of 4 factors (scaled to 100).", style_td_muted))
+        score_left.append(Paragraph(data_basis_line, style_td_muted))
 
-    if expense_categories:
-        if len(expense_categories) <= 6:
-            display_cats = expense_categories
-            other_cat_amt = 0.0
-            other_cat_pct = 0.0
+        factor_rows = []
+        if health_score_data.factors:
+            for f in health_score_data.factors:
+                if f.is_calculated:
+                    pts_str = f"<b>{f.earned_points:.0f}</b> / {f.max_points:.0f} pts"
+                else:
+                    pts_str = f"<font color='#94A3B8'>Not calculated ({f.not_calculated_reason or 'No data'})</font>"
+                factor_rows.append([
+                    Paragraph(f.name, style_td),
+                    Paragraph(pts_str, style_td)
+                ])
         else:
-            display_cats = expense_categories[:5]
-            other_cat_amt = sum(c["amount"] for c in expense_categories[5:])
-            other_cat_pct = sum(c["percentage"] for c in expense_categories[5:])
+            factor_rows = [
+                [Paragraph("Savings Rate (35 max)", style_td), Paragraph("Pending data", style_td_muted)],
+                [Paragraph("Budget Adherence (30 max)", style_td), Paragraph("Pending data", style_td_muted)],
+                [Paragraph("Expense Stability (20 max)", style_td), Paragraph("Pending data", style_td_muted)],
+                [Paragraph("Essential vs Non-essential (15 max)", style_td), Paragraph("Pending data", style_td_muted)],
+            ]
 
-        for cat in display_cats:
-            cat_table_data.append([
-                Paragraph(format_script_html(cat["name"]), style_td_bold),
-                Paragraph(format_indian_currency(cat["amount"]), style_td),
-                Paragraph(f"{cat['percentage']:.1f}%", style_td),
-                ProgressBar(cat["percentage"], width=130, height=5.5, fill_hex="#10B981", bg_hex="#E2E8F0"),
-            ])
+        factors_subtable = Table(factor_rows, colWidths=[175, 145])
+        factors_subtable.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ]))
 
-        if other_cat_amt > 0:
-            cat_table_data.append([
-                Paragraph("Other Categories", style_td_bold),
-                Paragraph(format_indian_currency(other_cat_amt), style_td),
-                Paragraph(f"{other_cat_pct:.1f}%", style_td),
-                ProgressBar(min(100.0, other_cat_pct), width=130, height=5.5, fill_hex="#94A3B8", bg_hex="#E2E8F0"),
-            ])
+        health_card_table = Table([[score_left, factors_subtable]], colWidths=[210, 330])
+        health_card_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFFFF")),
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E2E8F0")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        story.append(health_card_table)
+        story.append(Spacer(1, 6))
 
-        # Bottom Total Row so numbers mathematically add up to total_expenses and 100%
-        cat_table_data.append([
-            Paragraph("<b>Total Expenses</b>", style_td_bold),
-            Paragraph(f"<b>{format_indian_currency(total_expenses)}</b>", style_td_bold),
-            Paragraph("<b>100.0%</b>", style_td_bold),
-            ProgressBar(100.0, width=130, height=5.5, fill_hex="#10B981", bg_hex="#E2E8F0"),
-        ])
-    else:
-        cat_table_data.append([
-            Paragraph("No expense entries in this period", style_td_muted),
-            Paragraph("₹0", style_td),
-            Paragraph("0.0%", style_td),
-            ProgressBar(0, width=130, height=5.5),
-        ])
+        # 6. Where the Money Went (Top Expense Categories)
+        story.append(Paragraph("Where the Money Went (Expense Allocations)", style_section_title))
 
-    cat_table = Table(cat_table_data, colWidths=[160, 110, 70, 200])
-    cat_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
-        ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
-        ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-        ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.HexColor("#CBD5E1")),
-        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-    story.append(cat_table)
-    story.append(Spacer(1, 6))
-
-    # 7. Income Sources Table (Flows naturally without awkward page gap!)
-    story.append(Paragraph("Income Sources", style_section_title))
-    inc_table_data = [
-        [
-            Paragraph("Source / Category", style_th),
-            Paragraph("Amount", style_th),
-            Paragraph("Share of Income", style_th),
-        ]
-    ]
-    if income_sources:
-        if len(income_sources) <= 6:
-            display_inc = income_sources
-            other_inc_amt = 0.0
-            other_inc_pct = 0.0
-        else:
-            display_inc = income_sources[:5]
-            other_inc_amt = sum(c["amount"] for c in income_sources[5:])
-            other_inc_pct = sum(c["percentage"] for c in income_sources[5:])
-
-        for inc in display_inc:
-            inc_table_data.append([
-                Paragraph(format_script_html(inc["name"]), style_td_bold),
-                Paragraph(format_indian_currency(inc["amount"]), style_td),
-                Paragraph(f"{inc['percentage']:.1f}%", style_td),
-            ])
-
-        if other_inc_amt > 0:
-            inc_table_data.append([
-                Paragraph("Other Income Sources", style_td_bold),
-                Paragraph(format_indian_currency(other_inc_amt), style_td),
-                Paragraph(f"{other_inc_pct:.1f}%", style_td),
-            ])
-
-        # Bottom Total Row so numbers mathematically add up to total_income and 100%
-        inc_table_data.append([
-            Paragraph("<b>Total Income</b>", style_td_bold),
-            Paragraph(f"<b>{format_indian_currency(total_income)}</b>", style_td_bold),
-            Paragraph("<b>100.0%</b>", style_td_bold),
-        ])
-    else:
-        inc_table_data.append([
-            Paragraph("No income entries recorded for this period", style_td_muted),
-            Paragraph("₹0", style_td),
-            Paragraph("0.0%", style_td),
-        ])
-
-    inc_table = Table(inc_table_data, colWidths=[240, 150, 150])
-    inc_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
-        ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
-        ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-        ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.HexColor("#CBD5E1")),
-        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-    story.append(inc_table)
-    story.append(Spacer(1, 6))
-
-    # 8. Budgets Performance (Part 1, Item 1 & Part 2, Item 8 - Omitted if no budgets)
-    if budgets_summary and budgets_summary["total_count"] > 0:
-        budget_block = []
-        budget_block.append(Paragraph("Budgets Performance", style_section_title))
-
-        tot_b = budgets_summary["total_count"]
-        kept_b = budgets_summary["kept_count"]
-        near_b = budgets_summary["near_limit_count"]
-        if near_b > 0:
-            budget_sub = f"Stayed within {kept_b} of {tot_b} budgets, {near_b} of them close to the limit."
-        else:
-            budget_sub = f"Stayed within {kept_b} of {tot_b} budgets."
-        budget_block.append(Paragraph(budget_sub, style_td_muted))
-        budget_block.append(Spacer(1, 3))
-
-        bud_table_data = [
+        cat_table_data = [
             [
                 Paragraph("Category", style_th),
-                Paragraph("Limit", style_th),
-                Paragraph("Spent", style_th),
-                Paragraph("Remaining", style_th),
-                Paragraph("Progress", style_th),
-                Paragraph("Status", style_th),
+                Paragraph("Amount", style_th),
+                Paragraph("Share", style_th),
+                Paragraph("Distribution", style_th),
             ]
         ]
 
-        if len(budgets_summary["budgets"]) <= 8:
-            display_budgets = budgets_summary["budgets"]
-            other_b_limit = 0.0
-            other_b_spent = 0.0
-            other_b_count = 0
+        if expense_categories:
+            if len(expense_categories) <= 6:
+                display_cats = expense_categories
+                other_cat_amt = 0.0
+                other_cat_pct = 0.0
+            else:
+                display_cats = expense_categories[:5]
+                other_cat_amt = sum(c["amount"] for c in expense_categories[5:])
+                other_cat_pct = sum(c["percentage"] for c in expense_categories[5:])
+
+            for cat in display_cats:
+                cat_table_data.append([
+                    Paragraph(format_script_html(cat["name"]), style_td_bold),
+                    Paragraph(format_indian_currency(cat["amount"]), style_td),
+                    Paragraph(f"{cat['percentage']:.1f}%", style_td),
+                    ProgressBar(cat["percentage"], width=130, height=5.5, fill_hex="#10B981", bg_hex="#E2E8F0"),
+                ])
+
+            if other_cat_amt > 0:
+                cat_table_data.append([
+                    Paragraph("Other Categories", style_td_bold),
+                    Paragraph(format_indian_currency(other_cat_amt), style_td),
+                    Paragraph(f"{other_cat_pct:.1f}%", style_td),
+                    ProgressBar(min(100.0, other_cat_pct), width=130, height=5.5, fill_hex="#94A3B8", bg_hex="#E2E8F0"),
+                ])
+
+            # Bottom Total Row so numbers mathematically add up to total_expenses and 100%
+            cat_table_data.append([
+                Paragraph("<b>Total Expenses</b>", style_td_bold),
+                Paragraph(f"<b>{format_indian_currency(total_expenses)}</b>", style_td_bold),
+                Paragraph("<b>100.0%</b>", style_td_bold),
+                ProgressBar(100.0, width=130, height=5.5, fill_hex="#10B981", bg_hex="#E2E8F0"),
+            ])
         else:
-            display_budgets = budgets_summary["budgets"][:7]
-            other_b_limit = sum(b["limit"] for b in budgets_summary["budgets"][7:])
-            other_b_spent = sum(b["spent"] for b in budgets_summary["budgets"][7:])
-            other_b_count = len(budgets_summary["budgets"]) - 7
-
-        for b in display_budgets:
-            status_html = f'<font color="{b["status_color"]}"><b>{b["status_label"]}</b></font>'
-            rem_str = format_indian_currency(b["remaining"])
-
-            progress_flow = Table([
-                [
-                    ProgressBar(min(100.0, b["percentage_used"]), width=55, height=5.5, fill_hex=b["status_color"]),
-                    Paragraph(f"{b['percentage_used']:.0f}%", style_td_muted)
-                ]
-            ], colWidths=[60, 30])
-            progress_flow.setStyle(TableStyle([
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ]))
-
-            bud_table_data.append([
-                Paragraph(format_script_html(b["category"]), style_td_bold),
-                Paragraph(format_indian_currency(b["limit"]), style_td),
-                Paragraph(format_indian_currency(b["spent"]), style_td),
-                Paragraph(rem_str, style_td),
-                progress_flow,
-                Paragraph(status_html, style_td),
+            cat_table_data.append([
+                Paragraph("No expense entries in this period", style_td_muted),
+                Paragraph("₹0", style_td),
+                Paragraph("0.0%", style_td),
+                ProgressBar(0, width=130, height=5.5),
             ])
 
-        if other_b_count > 0:
-            other_rem = other_b_limit - other_b_spent
-            other_pct = (other_b_spent / other_b_limit * 100) if other_b_limit > 0 else 0.0
-            _, other_lbl, other_col = get_budget_status_info(other_b_spent, other_b_limit)
-            other_prog = Table([
-                [
-                    ProgressBar(min(100.0, other_pct), width=55, height=5.5, fill_hex=other_col),
-                    Paragraph(f"{other_pct:.0f}%", style_td_muted)
-                ]
-            ], colWidths=[60, 30])
-            other_prog.setStyle(TableStyle([
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ]))
-            bud_table_data.append([
-                Paragraph(f"Other Budgets ({other_b_count})", style_td_bold),
-                Paragraph(format_indian_currency(other_b_limit), style_td),
-                Paragraph(format_indian_currency(other_b_spent), style_td),
-                Paragraph(format_indian_currency(other_rem), style_td),
-                other_prog,
-                Paragraph(f'<font color="{other_col}"><b>{other_lbl}</b></font>', style_td),
-            ])
-
-        # Bottom Total Budgets Row
-        tot_limit = sum(b["limit"] for b in budgets_summary["budgets"])
-        tot_spent = sum(b["spent"] for b in budgets_summary["budgets"])
-        tot_rem = tot_limit - tot_spent
-        tot_pct = (tot_spent / tot_limit * 100) if tot_limit > 0 else 0.0
-        _, tot_lbl, tot_col = get_budget_status_info(tot_spent, tot_limit)
-        tot_prog = Table([
-            [
-                ProgressBar(min(100.0, tot_pct), width=55, height=5.5, fill_hex=tot_col),
-                Paragraph(f"<b>{tot_pct:.0f}%</b>", style_td)
-            ]
-        ], colWidths=[60, 30])
-        tot_prog.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        bud_table_data.append([
-            Paragraph("<b>Total Budgets</b>", style_td_bold),
-            Paragraph(f"<b>{format_indian_currency(tot_limit)}</b>", style_td_bold),
-            Paragraph(f"<b>{format_indian_currency(tot_spent)}</b>", style_td_bold),
-            Paragraph(f"<b>{format_indian_currency(tot_rem)}</b>", style_td_bold),
-            tot_prog,
-            Paragraph(f'<font color="{tot_col}"><b>{tot_lbl}</b></font>', style_td_bold),
-        ])
-
-        bud_table = Table(bud_table_data, colWidths=[120, 80, 80, 80, 95, 85])
-        bud_table.setStyle(TableStyle([
+        cat_table = Table(cat_table_data, colWidths=[160, 110, 70, 200])
+        cat_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
             ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
             ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
             ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.HexColor("#CBD5E1")),
-            ("TOPPADDING", (0, 0), (-1, -1), 3.5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
-        budget_block.append(bud_table)
-        story.append(KeepTogether(budget_block))
+        story.append(cat_table)
         story.append(Spacer(1, 6))
 
-    # 9. Active Savings Goals (Part 2, Item 8 - Omitted if no goals)
-    if goals_summary and len(goals_summary["goals"]) > 0:
-        goals_block = []
-        goals_block.append(Paragraph("Active Savings Goals", style_section_title))
-
-        goals_table_data = [
+        # 7. Income Sources Table (Flows naturally without awkward page gap!)
+        story.append(Paragraph("Income Sources", style_section_title))
+        inc_table_data = [
             [
-                Paragraph("Goal Name", style_th),
-                Paragraph("Target", style_th),
-                Paragraph("Saved", style_th),
-                Paragraph("Progress", style_th),
-                Paragraph("Deadline", style_th),
-                Paragraph("Added", style_th),
-                Paragraph("Status", style_th),
+                Paragraph("Source / Category", style_th),
+                Paragraph("Amount", style_th),
+                Paragraph("Share of Income", style_th),
             ]
         ]
+        if income_sources:
+            if len(income_sources) <= 4:
+                display_inc = income_sources
+                other_inc_amt = 0.0
+                other_inc_pct = 0.0
+            else:
+                display_inc = income_sources[:3]
+                other_inc_amt = sum(c["amount"] for c in income_sources[3:])
+                other_inc_pct = sum(c["percentage"] for c in income_sources[3:])
 
-        if len(goals_summary["goals"]) <= 6:
-            display_goals = goals_summary["goals"]
-            other_g_target = 0.0
-            other_g_saved = 0.0
-            other_g_added = 0.0
-            other_g_count = 0
+            for inc in display_inc:
+                inc_table_data.append([
+                    Paragraph(format_script_html(inc["name"]), style_td_bold),
+                    Paragraph(format_indian_currency(inc["amount"]), style_td),
+                    Paragraph(f"{inc['percentage']:.1f}%", style_td),
+                ])
+
+            if other_inc_amt > 0:
+                inc_table_data.append([
+                    Paragraph("Other Income Sources", style_td_bold),
+                    Paragraph(format_indian_currency(other_inc_amt), style_td),
+                    Paragraph(f"{other_inc_pct:.1f}%", style_td),
+                ])
+
+            # Bottom Total Row so numbers mathematically add up to total_income and 100%
+            inc_table_data.append([
+                Paragraph("<b>Total Income</b>", style_td_bold),
+                Paragraph(f"<b>{format_indian_currency(total_income)}</b>", style_td_bold),
+                Paragraph("<b>100.0%</b>", style_td_bold),
+            ])
         else:
-            display_goals = goals_summary["goals"][:5]
-            other_g_target = sum(g["target"] for g in goals_summary["goals"][5:])
-            other_g_saved = sum(g["saved"] for g in goals_summary["goals"][5:])
-            other_g_added = sum(g["added_period"] for g in goals_summary["goals"][5:])
-            other_g_count = len(goals_summary["goals"]) - 5
-
-        for g in display_goals:
-            status_html = f'<font color="{g["status_color"]}"><b>{g["status_label"]}</b></font>'
-            goal_prog = Table([
-                [
-                    ProgressBar(min(100.0, g["percentage"]), width=55, height=5.5, fill_hex=g["status_color"]),
-                    Paragraph(f"{g['percentage']:.0f}%", style_td_muted)
-                ]
-            ], colWidths=[60, 30])
-            goal_prog.setStyle(TableStyle([
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ]))
-
-            goals_table_data.append([
-                Paragraph(format_script_html(g["title"]), style_td_bold),
-                Paragraph(format_indian_currency(g["target"]), style_td),
-                Paragraph(format_indian_currency(g["saved"]), style_td),
-                goal_prog,
-                Paragraph(g["deadline"], style_td_muted),
-                Paragraph(format_indian_currency(g["added_period"]), style_td),
-                Paragraph(status_html, style_td),
+            inc_table_data.append([
+                Paragraph("No income entries recorded for this period", style_td_muted),
+                Paragraph("₹0", style_td),
+                Paragraph("0.0%", style_td),
             ])
 
-        if other_g_count > 0:
-            other_g_pct = (other_g_saved / other_g_target * 100) if other_g_target > 0 else 0.0
-            other_g_prog = Table([
+        inc_table = Table(inc_table_data, colWidths=[240, 150, 150])
+        inc_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+            ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.HexColor("#CBD5E1")),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        story.append(inc_table)
+        story.append(Spacer(1, 6))
+
+        # 8. Budgets Performance (Part 1, Item 1 & Part 2, Item 8 - Omitted if no budgets)
+        if budgets_summary and budgets_summary["total_count"] > 0:
+            budget_block = []
+            budget_block.append(Paragraph("Budgets Performance", style_section_title))
+
+            tot_b = budgets_summary["total_count"]
+            kept_b = budgets_summary["kept_count"]
+            near_b = budgets_summary["near_limit_count"]
+            if near_b > 0:
+                budget_sub = f"Stayed within {kept_b} of {tot_b} budgets, {near_b} of them close to the limit."
+            else:
+                budget_sub = f"Stayed within {kept_b} of {tot_b} budgets."
+            budget_block.append(Paragraph(budget_sub, style_td_muted))
+            budget_block.append(Spacer(1, 3))
+
+            bud_table_data = [
                 [
-                    ProgressBar(min(100.0, other_g_pct), width=55, height=5.5, fill_hex="#10B981"),
-                    Paragraph(f"{other_g_pct:.0f}%", style_td_muted)
+                    Paragraph("Category", style_th),
+                    Paragraph("Limit", style_th),
+                    Paragraph("Spent", style_th),
+                    Paragraph("Remaining", style_th),
+                    Paragraph("Progress", style_th),
+                    Paragraph("Status", style_th),
+                ]
+            ]
+
+            # Requirement 5: List every budget that is over or near its limit by name.
+            # Group ONLY the on-track ones into "Other Budgets (N)".
+            over_or_near = [b for b in budgets_summary["budgets"] if b["status_key"] in ("exceeded", "warning")]
+            on_track = [b for b in budgets_summary["budgets"] if b["status_key"] not in ("exceeded", "warning")]
+
+            max_rows_target = 5
+            slots_for_on_track = max(0, max_rows_target - len(over_or_near))
+
+            if len(on_track) <= slots_for_on_track:
+                display_budgets = over_or_near + on_track
+                grouped_on_track = []
+            else:
+                display_budgets = over_or_near + on_track[:slots_for_on_track]
+                grouped_on_track = on_track[slots_for_on_track:]
+
+            # Sort the displayed budgets with highest percentage_used first
+            display_budgets.sort(key=lambda x: x["percentage_used"], reverse=True)
+
+            other_b_limit = sum(b["limit"] for b in grouped_on_track)
+            other_b_spent = sum(b["spent"] for b in grouped_on_track)
+            other_b_count = len(grouped_on_track)
+
+            for b in display_budgets:
+                status_html = f'<font color="{b["status_color"]}"><b>{b["status_label"]}</b></font>'
+                rem_str = format_indian_currency(b["remaining"])
+
+                progress_flow = Table([
+                    [
+                        ProgressBar(min(100.0, b["percentage_used"]), width=55, height=5.5, fill_hex=b["status_color"]),
+                        Paragraph(f"{b['percentage_used']:.0f}%", style_td_muted)
+                    ]
+                ], colWidths=[60, 30])
+                progress_flow.setStyle(TableStyle([
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]))
+
+                bud_table_data.append([
+                    Paragraph(format_script_html(b["category"]), style_td_bold),
+                    Paragraph(format_indian_currency(b["limit"]), style_td),
+                    Paragraph(format_indian_currency(b["spent"]), style_td),
+                    Paragraph(rem_str, style_td),
+                    progress_flow,
+                    Paragraph(status_html, style_td),
+                ])
+
+            if other_b_count > 0:
+                other_rem = other_b_limit - other_b_spent
+                other_pct = (other_b_spent / other_b_limit * 100) if other_b_limit > 0 else 0.0
+                _, other_lbl, other_col = get_budget_status_info(other_b_spent, other_b_limit)
+                other_prog = Table([
+                    [
+                        ProgressBar(min(100.0, other_pct), width=55, height=5.5, fill_hex=other_col),
+                        Paragraph(f"{other_pct:.0f}%", style_td_muted)
+                    ]
+                ], colWidths=[60, 30])
+                other_prog.setStyle(TableStyle([
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]))
+                bud_table_data.append([
+                    Paragraph(f"Other Budgets ({other_b_count})", style_td_bold),
+                    Paragraph(format_indian_currency(other_b_limit), style_td),
+                    Paragraph(format_indian_currency(other_b_spent), style_td),
+                    Paragraph(format_indian_currency(other_rem), style_td),
+                    other_prog,
+                    Paragraph(f'<font color="{other_col}"><b>{other_lbl}</b></font>', style_td),
+                ])
+
+            # Bottom Total Budgets Row
+            tot_limit = sum(b["limit"] for b in budgets_summary["budgets"])
+            tot_spent = sum(b["spent"] for b in budgets_summary["budgets"])
+            tot_rem = tot_limit - tot_spent
+            tot_pct = (tot_spent / tot_limit * 100) if tot_limit > 0 else 0.0
+            _, tot_lbl, tot_col = get_budget_status_info(tot_spent, tot_limit)
+            tot_prog = Table([
+                [
+                    ProgressBar(min(100.0, tot_pct), width=55, height=5.5, fill_hex=tot_col),
+                    Paragraph(f"<b>{tot_pct:.0f}%</b>", style_td)
                 ]
             ], colWidths=[60, 30])
-            other_g_prog.setStyle(TableStyle([
+            tot_prog.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            bud_table_data.append([
+                Paragraph("<b>Total Budgets</b>", style_td_bold),
+                Paragraph(f"<b>{format_indian_currency(tot_limit)}</b>", style_td_bold),
+                Paragraph(f"<b>{format_indian_currency(tot_spent)}</b>", style_td_bold),
+                Paragraph(f"<b>{format_indian_currency(tot_rem)}</b>", style_td_bold),
+                tot_prog,
+                Paragraph(f'<font color="{tot_col}"><b>{tot_lbl}</b></font>', style_td_bold),
+            ])
+
+            bud_table = Table(bud_table_data, colWidths=[120, 80, 80, 80, 95, 85])
+            bud_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+                ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.HexColor("#CBD5E1")),
+                ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            budget_block.append(bud_table)
+            story.append(KeepTogether(budget_block))
+            story.append(Spacer(1, 6))
+
+        # 9. Active Savings Goals (Part 2, Item 8 - Omitted if no goals)
+        if goals_summary and len(goals_summary["goals"]) > 0:
+            goals_block = []
+            goals_block.append(Paragraph("Active Savings Goals", style_section_title))
+
+            goals_table_data = [
+                [
+                    Paragraph("Goal Name", style_th),
+                    Paragraph("Target", style_th),
+                    Paragraph("Saved", style_th),
+                    Paragraph("Progress", style_th),
+                    Paragraph("Deadline", style_th),
+                    Paragraph("Added", style_th),
+                    Paragraph("Status", style_th),
+                ]
+            ]
+
+            if len(goals_summary["goals"]) <= 4:
+                display_goals = goals_summary["goals"]
+                other_g_target = 0.0
+                other_g_saved = 0.0
+                other_g_added = 0.0
+                other_g_count = 0
+            else:
+                display_goals = goals_summary["goals"][:3]
+                other_g_target = sum(g["target"] for g in goals_summary["goals"][3:])
+                other_g_saved = sum(g["saved"] for g in goals_summary["goals"][3:])
+                other_g_added = sum(g["added_period"] for g in goals_summary["goals"][3:])
+                other_g_count = len(goals_summary["goals"]) - 3
+
+            for g in display_goals:
+                status_html = f'<font color="{g["status_color"]}"><b>{g["status_label"]}</b></font>'
+                goal_prog = Table([
+                    [
+                        ProgressBar(min(100.0, g["percentage"]), width=55, height=5.5, fill_hex=g["status_color"]),
+                        Paragraph(f"{g['percentage']:.0f}%", style_td_muted)
+                    ]
+                ], colWidths=[60, 30])
+                goal_prog.setStyle(TableStyle([
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]))
+
+                goals_table_data.append([
+                    Paragraph(format_script_html(g["title"]), style_td_bold),
+                    Paragraph(format_indian_currency(g["target"]), style_td),
+                    Paragraph(format_indian_currency(g["saved"]), style_td),
+                    goal_prog,
+                    Paragraph(g["deadline"], style_td_muted),
+                    Paragraph(format_indian_currency(g["added_period"]), style_td),
+                    Paragraph(status_html, style_td),
+                ])
+
+            if other_g_count > 0:
+                other_g_pct = (other_g_saved / other_g_target * 100) if other_g_target > 0 else 0.0
+                other_g_prog = Table([
+                    [
+                        ProgressBar(min(100.0, other_g_pct), width=55, height=5.5, fill_hex="#10B981"),
+                        Paragraph(f"{other_g_pct:.0f}%", style_td_muted)
+                    ]
+                ], colWidths=[60, 30])
+                other_g_prog.setStyle(TableStyle([
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]))
+                goals_table_data.append([
+                    Paragraph(f"Other Goals ({other_g_count})", style_td_bold),
+                    Paragraph(format_indian_currency(other_g_target), style_td),
+                    Paragraph(format_indian_currency(other_g_saved), style_td),
+                    other_g_prog,
+                    Paragraph("-", style_td_muted),
+                    Paragraph(format_indian_currency(other_g_added), style_td),
+                    Paragraph("In progress", style_td),
+                ])
+
+            # Bottom Total Goals Row
+            tot_target = sum(g["target"] for g in goals_summary["goals"])
+            tot_saved = sum(g["saved"] for g in goals_summary["goals"])
+            tot_pct = (tot_saved / tot_target * 100) if tot_target > 0 else 0.0
+            tot_added = goals_summary["total_added_period"]
+            tot_g_prog = Table([
+                [
+                    ProgressBar(min(100.0, tot_pct), width=55, height=5.5, fill_hex="#10B981"),
+                    Paragraph(f"<b>{tot_pct:.0f}%</b>", style_td)
+                ]
+            ], colWidths=[60, 30])
+            tot_g_prog.setStyle(TableStyle([
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 0),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
@@ -1502,107 +1565,153 @@ def generate_pdf_report(
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
             ]))
             goals_table_data.append([
-                Paragraph(f"Other Goals ({other_g_count})", style_td_bold),
-                Paragraph(format_indian_currency(other_g_target), style_td),
-                Paragraph(format_indian_currency(other_g_saved), style_td),
-                other_g_prog,
+                Paragraph("<b>Total Goals</b>", style_td_bold),
+                Paragraph(f"<b>{format_indian_currency(tot_target)}</b>", style_td_bold),
+                Paragraph(f"<b>{format_indian_currency(tot_saved)}</b>", style_td_bold),
+                tot_g_prog,
                 Paragraph("-", style_td_muted),
-                Paragraph(format_indian_currency(other_g_added), style_td),
-                Paragraph("In progress", style_td),
+                Paragraph(f"<b>{format_indian_currency(tot_added)}</b>", style_td_bold),
+                Paragraph(f"<b>{len(goals_summary['goals'])} Active</b>", style_td_bold),
             ])
 
-        # Bottom Total Goals Row
-        tot_target = sum(g["target"] for g in goals_summary["goals"])
-        tot_saved = sum(g["saved"] for g in goals_summary["goals"])
-        tot_pct = (tot_saved / tot_target * 100) if tot_target > 0 else 0.0
-        tot_added = goals_summary["total_added_period"]
-        tot_g_prog = Table([
-            [
-                ProgressBar(min(100.0, tot_pct), width=55, height=5.5, fill_hex="#10B981"),
-                Paragraph(f"<b>{tot_pct:.0f}%</b>", style_td)
-            ]
-        ], colWidths=[60, 30])
-        tot_g_prog.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        goals_table_data.append([
-            Paragraph("<b>Total Goals</b>", style_td_bold),
-            Paragraph(f"<b>{format_indian_currency(tot_target)}</b>", style_td_bold),
-            Paragraph(f"<b>{format_indian_currency(tot_saved)}</b>", style_td_bold),
-            tot_g_prog,
-            Paragraph("-", style_td_muted),
-            Paragraph(f"<b>{format_indian_currency(tot_added)}</b>", style_td_bold),
-            Paragraph(f"<b>{len(goals_summary['goals'])} Active</b>", style_td_bold),
-        ])
+            goals_table = Table(goals_table_data, colWidths=[120, 75, 75, 95, 75, 55, 45])
+            goals_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
+                ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.HexColor("#CBD5E1")),
+                ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            goals_block.append(goals_table)
+            goals_block.append(Spacer(1, 3))
 
-        goals_table = Table(goals_table_data, colWidths=[120, 75, 75, 95, 75, 55, 45])
-        goals_table.setStyle(TableStyle([
+            # Requirement 2: Note under the Active Savings Goals table
+            base_goal_note = (
+                "How goals work: money you add to a goal is recorded for that goal only. "
+                "It is not counted as an expense and does not change your income, expenses or savings figures above. "
+                "FinTrack tracks your goals; it does not move money between accounts."
+            )
+            goals_block.append(Paragraph(base_goal_note, style_goal_note))
+
+            # When total added to goals in the period is greater than the period's net savings, add one more line:
+            if tot_added > net_savings:
+                extra_y = tot_added - net_savings
+                extra_goal_line = (
+                    f"You added {format_indian_currency(tot_added)} to goals this period, which is "
+                    f"{format_indian_currency(extra_y)} more than you saved this period. "
+                    "That is fine: goal money can come from savings you made earlier."
+                )
+                goals_block.append(Spacer(1, 1.5))
+                goals_block.append(Paragraph(extra_goal_line, style_goal_note))
+
+            story.append(KeepTogether(goals_block))
+            story.append(Spacer(1, 6))
+
+        # 10. Top 5 Single Expenses in Period (Part 2, Item 6)
+        expenses_block = []
+        expenses_block.append(Paragraph("Top Single Expenses", style_section_title))
+        top_exp_table_data = [
+            [
+                Paragraph("Description", style_th),
+                Paragraph("Category", style_th),
+                Paragraph("Method", style_th),
+                Paragraph("Date", style_th),
+                Paragraph("Amount", style_th),
+            ]
+        ]
+        if top_expenses:
+            for te in top_expenses:
+                top_exp_table_data.append([
+                    Paragraph(format_script_html(te["description"]), style_td_bold),
+                    Paragraph(format_script_html(te["category"]), style_td),
+                    Paragraph(te["payment_method"], style_td_muted),
+                    Paragraph(te["date"], style_td_muted),
+                    Paragraph(format_indian_currency(te["amount"]), style_td_bold),
+                ])
+        else:
+            top_exp_table_data.append([
+                Paragraph("No single expenses logged in this period", style_td_muted),
+                Paragraph("-", style_td),
+                Paragraph("-", style_td),
+                Paragraph("-", style_td),
+                Paragraph("₹0", style_td),
+            ])
+
+        top_exp_table = Table(top_exp_table_data, colWidths=[160, 110, 85, 85, 100])
+        top_exp_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
             ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
             ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-            ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.HexColor("#CBD5E1")),
-            ("TOPPADDING", (0, 0), (-1, -1), 3.5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
             ("LEFTPADDING", (0, 0), (-1, -1), 4),
             ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
-        goals_block.append(goals_table)
-        story.append(KeepTogether(goals_block))
-        story.append(Spacer(1, 6))
+        expenses_block.append(top_exp_table)
+        story.append(KeepTogether(expenses_block))
 
-    # 10. Top 5 Single Expenses in Period (Part 2, Item 6)
-    expenses_block = []
-    expenses_block.append(Paragraph("Top Single Expenses", style_section_title))
-    top_exp_table_data = [
-        [
-            Paragraph("Description", style_th),
-            Paragraph("Category", style_th),
-            Paragraph("Method", style_th),
-            Paragraph("Date", style_th),
-            Paragraph("Amount", style_th),
-        ]
-    ]
-    if top_expenses:
-        for te in top_expenses:
-            top_exp_table_data.append([
-                Paragraph(format_script_html(te["description"]), style_td_bold),
-                Paragraph(format_script_html(te["category"]), style_td),
-                Paragraph(te["payment_method"], style_td_muted),
-                Paragraph(te["date"], style_td_muted),
-                Paragraph(format_indian_currency(te["amount"]), style_td_bold),
-            ])
-    else:
-        top_exp_table_data.append([
-            Paragraph("No single expenses logged in this period", style_td_muted),
-            Paragraph("-", style_td),
-            Paragraph("-", style_td),
-            Paragraph("-", style_td),
-            Paragraph("₹0", style_td),
-        ])
+        if include_key:
+            key_block = [
+                Spacer(1, 4),
+                Paragraph("<b>How to read this report:</b>", style_key_title),
+                Paragraph("• Savings = income minus expenses.", style_key_item),
+                Paragraph("• Goals are tracked separately and are not part of expenses or savings.", style_key_item),
+                Paragraph("• Budget percentages show spending against each monthly limit.", style_key_item),
+                Paragraph("• The Financial Health Score is out of 100 and is explained on the Analytics page.", style_key_item),
+            ]
+            story.append(KeepTogether(key_block))
 
-    top_exp_table = Table(top_exp_table_data, colWidths=[160, 110, 85, 85, 100])
-    top_exp_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
-        ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.HexColor("#CBD5E1")),
-        ("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-    expenses_block.append(top_exp_table)
-    story.append(KeepTogether(expenses_block))
+        return story
 
     # -------------------------------------------------------------
-    # 6.12 Build Document into Memory via FinTrackNumberedCanvas
+    # 6.12 Build Document into Memory with 2-Page Constraint
     # -------------------------------------------------------------
-    doc.build(story, canvasmaker=FinTrackNumberedCanvas)
+    # Attempt 1: Try building with key_block first
+    story_with_key = _build_story(include_key=True)
+    test_buffer = io.BytesIO()
+    test_doc = SimpleDocTemplate(
+        test_buffer,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=28,
+        bottomMargin=32,
+        title=doc_title,
+        author="FinTrack",
+        subject=doc_title,
+        creator="FinTrack Personal Finance",
+        displayDocTitle=True,
+    )
+    test_doc.build(story_with_key, canvasmaker=FinTrackNumberedCanvas)
+    test_bytes = test_buffer.getvalue()
+    test_buffer.close()
+
+    reader = pypdf.PdfReader(io.BytesIO(test_bytes))
+    if len(reader.pages) <= 2:
+        return test_bytes, filename
+
+    # Attempt 2: Key caused 3rd page -> build brand-new fresh story without key
+    story_without_key = _build_story(include_key=False)
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=28,
+        bottomMargin=32,
+        title=doc_title,
+        author="FinTrack",
+        subject=doc_title,
+        creator="FinTrack Personal Finance",
+        displayDocTitle=True,
+    )
+    doc.build(story_without_key, canvasmaker=FinTrackNumberedCanvas)
     pdf_bytes = buffer.getvalue()
     buffer.close()
 

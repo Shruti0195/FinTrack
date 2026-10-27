@@ -6,7 +6,6 @@ import {
   Check,
   Save,
   AlertCircle,
-  ExternalLink,
   Lock,
   Shield
 } from 'lucide-react';
@@ -28,7 +27,7 @@ export interface SettingsViewProps {
   onNavigateTab?: (tab: string) => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfileUpdate, onNavigateTab }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfileUpdate }) => {
   const [profile, setProfile] = useState<UserSettings>({
     name: initialName || '',
     email: '',
@@ -272,78 +271,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            {/* Informational Note for Moved Alert Settings */}
-            <div style={{
-              padding: '16px 18px',
-              backgroundColor: 'var(--card-subtle)',
-              borderRadius: '10px',
-              border: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '14px'
-            }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--light-accent)',
-                color: 'var(--accent)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                marginTop: '1px'
-              }}>
-                <Bell size={17} />
-              </div>
-              <div style={{ fontSize: '13.5px', color: 'var(--main-text)', lineHeight: 1.6, flex: 1 }}>
-                <div>
-                  <strong>Budget alert settings</strong> have moved to the{' '}
-                  <button
-                    type="button"
-                    onClick={() => onNavigateTab ? onNavigateTab('budgets') : (window.location.hash = '#budgets')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      color: 'var(--accent)',
-                      fontWeight: 600,
-                      textDecoration: 'underline',
-                      cursor: 'pointer',
-                      font: 'inherit',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '3px'
-                    }}
-                  >
-                    Budgets page <ExternalLink size={12} />
-                  </button>.
-                </div>
-                <div style={{ marginTop: '6px' }}>
-                  <strong>Goal alert settings</strong> have moved to the{' '}
-                  <button
-                    type="button"
-                    onClick={() => onNavigateTab ? onNavigateTab('goals') : (window.location.hash = '#goals')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      color: 'var(--accent)',
-                      fontWeight: 600,
-                      textDecoration: 'underline',
-                      cursor: 'pointer',
-                      font: 'inherit',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '3px'
-                    }}
-                  >
-                    Goals page <ExternalLink size={12} />
-                  </button>.
-                </div>
-              </div>
-            </div>
-
             {/* Monthly Financial Report Switch */}
             <div style={{
               display: 'flex',

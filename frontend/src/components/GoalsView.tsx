@@ -41,6 +41,7 @@ import {
 import { GoalAlertSettingsModal, formatGoalAlertPreview, formatGoalCardBellSummary } from './GoalAlertSettingsModal';
 import { PauseAlertsModal } from './PauseAlertsModal';
 import { PeriodCapsule } from './PeriodCapsule';
+import { GoalsInfoTooltip } from './GoalsInfoTooltip';
 
 const QUICK_MILESTONES = [25, 50, 75, 100];
 
@@ -650,6 +651,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
             <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Financial Goals
             </h1>
+            <GoalsInfoTooltip size={18} />
           </div>
           <p style={{ fontSize: '14px', color: 'var(--secondary-text)', margin: 0 }}>
             Set meaningful targets, save step-by-step, and watch your progress grow.
@@ -1775,6 +1777,9 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                   required
                   autoFocus
                 />
+                <div style={{ marginTop: '5px', fontSize: '11.5px', color: 'var(--secondary-text)', lineHeight: 1.35 }}>
+                  This is recorded for this goal only. It doesn't change your income, expenses or savings figures.
+                </div>
               </div>
 
               <div style={{ marginBottom: '14px' }}>

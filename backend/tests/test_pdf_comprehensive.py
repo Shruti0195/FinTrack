@@ -403,8 +403,123 @@ def run_all_tests():
     assert format_indian_currency(ov_exp.previous_value) in full_text, f"Expected {format_indian_currency(ov_exp.previous_value)} in PDF"
     print("  -> TEST 13 PASSED: Analytics and PDF share identical apples-to-apples comparison numbers.")
 
+    # -------------------------------------------------------------------------
+    # TEST 14: Goals Contributions Exceed Net Savings (Extra note line appears)
+    # -------------------------------------------------------------------------
+    print("\n[Test 14] Testing Goals contributions exceeding net savings (extra note line appears)...")
+    u14_id = uuid.uuid4()
+    u14 = User(id=u14_id, email="u14@test.com", password_hash="hash", name="Exceed User", is_active=True)
+    db.add(u14)
+    cat_inc_14 = Category(id=uuid.uuid4(), user_id=u14_id, name="Salary14", type="income")
+    cat_exp_14 = Category(id=uuid.uuid4(), user_id=u14_id, name="Groceries14", type="expense")
+    db.add_all([cat_inc_14, cat_exp_14])
+    g14 = Goal(id=uuid.uuid4(), user_id=u14_id, title="Vacation Fund", target_amount=100000.0, status="active")
+    db.add(g14)
+    db.commit()
+
+    # Income = 20,000, Expense = 12,000 => Net Savings = 8,000
+    # Added to goals = 25,000 => 25,000 > 8,000 (exceeds by 17,000)
+    db.add(Transaction(id=uuid.uuid4(), user_id=u14_id, category_id=cat_inc_14.id, amount=20000.0, type="income", transaction_date=date(curr_year, curr_month, 2)))
+    db.add(Transaction(id=uuid.uuid4(), user_id=u14_id, category_id=cat_exp_14.id, amount=12000.0, type="expense", transaction_date=date(curr_year, curr_month, 5)))
+    db.add(GoalContribution(id=uuid.uuid4(), goal_id=g14.id, amount=25000.0, contributed_at=date(curr_year, curr_month, 10)))
+    db.commit()
+
+    pdf_bytes14, _ = generate_pdf_report(db=db, user=u14, period_type="monthly", year=curr_year, month=curr_month)
+    reader14 = PdfReader(io.BytesIO(pdf_bytes14))
+    text14 = " ".join([page.extract_text() for page in reader14.pages])
+
+    assert len(reader14.pages) <= 2, f"Expected <= 2 pages, got {len(reader14.pages)}"
+    assert "You added ₹25,000 to your goals. Goal money is tracked separately and is not counted as an expense." in text14
+    assert "How goals work: money you add to a goal is recorded for that goal only" in text14
+    assert "more than you saved this period. That is fine: goal money can come from savings you made earlier." in text14
+    assert "How to read this report:" in text14
+    print("  -> TEST 14 PASSED: Extra line and summary sentence appear when goals exceed net savings.")
+
+    # -------------------------------------------------------------------------
+    # TEST 15: Goals Contributions Within Net Savings (Extra note line absent)
+    # -------------------------------------------------------------------------
+    print("\n[Test 15] Testing Goals contributions within net savings (extra line absent)...")
+    u15_id = uuid.uuid4()
+    u15 = User(id=u15_id, email="u15@test.com", password_hash="hash", name="Within User", is_active=True)
+    db.add(u15)
+    g15 = Goal(id=uuid.uuid4(), user_id=u15_id, title="Emergency Fund", target_amount=150000.0, status="active")
+    db.add(g15)
+    db.commit()
+
+    # Income = 50,000, Expense = 10,000 => Net Savings = 40,000
+    # Added to goals = 15,000 => 15,000 <= 40,000
+    db.add(Transaction(id=uuid.uuid4(), user_id=u15_id, category_id=cat_inc_14.id, amount=50000.0, type="income", transaction_date=date(curr_year, curr_month, 2)))
+    db.add(Transaction(id=uuid.uuid4(), user_id=u15_id, category_id=cat_exp_14.id, amount=10000.0, type="expense", transaction_date=date(curr_year, curr_month, 5)))
+    db.add(GoalContribution(id=uuid.uuid4(), goal_id=g15.id, amount=15000.0, contributed_at=date(curr_year, curr_month, 10)))
+    db.commit()
+
+    pdf_bytes15, _ = generate_pdf_report(db=db, user=u15, period_type="monthly", year=curr_year, month=curr_month)
+    reader15 = PdfReader(io.BytesIO(pdf_bytes15))
+    text15 = " ".join([page.extract_text() for page in reader15.pages])
+
+    assert len(reader15.pages) <= 2, f"Expected <= 2 pages, got {len(reader15.pages)}"
+    assert "You added ₹15,000 to your goals. Goal money is tracked separately and is not counted as an expense." in text15
+    assert "How goals work: money you add to a goal is recorded for that goal only" in text15
+    assert "more than you saved this period" not in text15, "Extra line should NOT appear when contributions <= savings"
+    print("  -> TEST 15 PASSED: Extra line correctly absent when goal contributions stay within net savings.")
+
+    # -------------------------------------------------------------------------
+    # TEST 16: Zero Goal Contributions in Period (Summary sentence omitted)
+    # -------------------------------------------------------------------------
+    print("\n[Test 16] Testing zero goal contributions in period (summary sentence omitted)...")
+    u16_id = uuid.uuid4()
+    u16 = User(id=u16_id, email="u16@test.com", password_hash="hash", name="Zero Contrib User", is_active=True)
+    db.add(u16)
+    g16 = Goal(id=uuid.uuid4(), user_id=u16_id, title="Retirement", target_amount=500000.0, status="active")
+    db.add(g16)
+    db.commit()
+
+    db.add(Transaction(id=uuid.uuid4(), user_id=u16_id, category_id=cat_inc_14.id, amount=30000.0, type="income", transaction_date=date(curr_year, curr_month, 2)))
+    db.add(Transaction(id=uuid.uuid4(), user_id=u16_id, category_id=cat_exp_14.id, amount=10000.0, type="expense", transaction_date=date(curr_year, curr_month, 5)))
+    db.commit()
+
+    pdf_bytes16, _ = generate_pdf_report(db=db, user=u16, period_type="monthly", year=curr_year, month=curr_month)
+    reader16 = PdfReader(io.BytesIO(pdf_bytes16))
+    text16 = " ".join([page.extract_text() for page in reader16.pages])
+
+    assert "to your goals" not in text16, "Goal summary sentence should be omitted when nothing added"
+    assert "How goals work: money you add to a goal is recorded for that goal only" in text16
+    print("  -> TEST 16 PASSED: Goal summary sentence cleanly omitted when no contributions added in period.")
+
+    # -------------------------------------------------------------------------
+    # TEST 17: Budgets Grouping and Count Matching
+    # -------------------------------------------------------------------------
+    print("\n[Test 17] Testing Budgets grouping and exact count matching...")
+    u17_id = uuid.uuid4()
+    u17 = User(id=u17_id, email="u17@test.com", password_hash="hash", name="Budget Group User", is_active=True)
+    db.add(u17)
+    db.commit()
+
+    for i in range(1, 11):
+        c_i = Category(id=uuid.uuid4(), user_id=u17_id, name=f"CatGrp {i}", type="expense")
+        db.add(c_i)
+        db.commit()
+        b_i = Budget(id=uuid.uuid4(), user_id=u17_id, category_id=c_i.id, limit_amount=10000.0, month=curr_month, year=curr_year)
+        db.add(b_i)
+        db.commit()
+        # 3 near limit (80%), 7 on track (20%)
+        amt = 8000.0 if i <= 3 else 2000.0
+        db.add(Transaction(id=uuid.uuid4(), user_id=u17_id, category_id=c_i.id, amount=amt, type="expense", transaction_date=date(curr_year, curr_month, 4)))
+    db.commit()
+
+    pdf_bytes17, _ = generate_pdf_report(db=db, user=u17, period_type="monthly", year=curr_year, month=curr_month)
+    reader17 = PdfReader(io.BytesIO(pdf_bytes17))
+    text17 = " ".join([page.extract_text() for page in reader17.pages])
+
+    assert "3 of them close to the limit" in text17
+    assert "CatGrp 1" in text17
+    assert "CatGrp 2" in text17
+    assert "CatGrp 3" in text17
+    assert "Other Budgets (" in text17
+    print("  -> TEST 17 PASSED: All warning budgets listed individually by name; counts match summary.")
+
     print("\n=========================================================================")
-    print(" ALL 13 COMPREHENSIVE AUTOMATED TESTS PASSED SUCCESSFULLY! ")
+    print(" ALL 17 COMPREHENSIVE AUTOMATED TESTS PASSED SUCCESSFULLY! ")
     print("=========================================================================")
 
 

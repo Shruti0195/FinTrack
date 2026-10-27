@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ChevronRight, AlertCircle, RefreshCw, PlusCircle, Target, Plus } from 'lucide-react';
 import { getGoals, type Goal } from '../api/goals';
+import { GoalsInfoTooltip } from './GoalsInfoTooltip';
 
 export interface DashboardGoalsWidgetProps {
   onNavigateTab: (tab: string) => void;
@@ -103,7 +104,10 @@ export const DashboardGoalsWidget: React.FC<DashboardGoalsWidgetProps> = ({
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <div>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--primary)' }}>Savings Goals</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--primary)' }}>Savings Goals</span>
+            <GoalsInfoTooltip size={14} />
+          </div>
           <div style={{ fontSize: '12px', color: 'var(--secondary-text)' }}>
             Active goals · Nearest deadline first
           </div>

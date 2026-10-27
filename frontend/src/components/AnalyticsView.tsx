@@ -19,6 +19,7 @@ import {
   type FinancialHealthScoreData
 } from '../api/analytics';
 import { PeriodCapsule } from './PeriodCapsule';
+import { GoalsInfoTooltip } from './GoalsInfoTooltip';
 
 interface AnalyticsViewProps {
   periodType: 'monthly' | 'quarterly' | 'half_year' | 'yearly';
@@ -1049,9 +1050,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--secondary-text)' }}>
-                    {c.label}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--secondary-text)' }}>
+                      {c.label}
+                    </span>
+                    {c.key === 'savings' && (
+                      <GoalsInfoTooltip size={13} align="left" />
+                    )}
+                  </div>
                   <div
                     style={{
                       display: 'flex',

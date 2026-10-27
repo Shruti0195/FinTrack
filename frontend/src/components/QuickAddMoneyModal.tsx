@@ -220,6 +220,9 @@ export const QuickAddMoneyModal: React.FC<QuickAddMoneyModalProps> = ({
                 disabled={isCompleted}
               />
             </div>
+            <div style={{ marginTop: '5px', fontSize: '11.5px', color: 'var(--secondary-text)', lineHeight: 1.35 }}>
+              This is recorded for this goal only. It doesn't change your income, expenses or savings figures.
+            </div>
           </div>
 
           {/* Note */}
