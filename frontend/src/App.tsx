@@ -1,23 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
 import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { AdminLayout } from './components/admin/AdminLayout';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
 import { AuthModal } from './components/AuthModal';
+import api from './api/client';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: 'USER' | 'ADMIN';
+}
 
 function AppContent() {
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
+  const [authModalOpen, setAuthModalOpen] = useState(() => {
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    const isTargetingAdmin = path.startsWith('/admin') || hash.startsWith('#admin');
+    const isTargetingLogin = path.startsWith('/login') || hash.startsWith('#login');
+    return (isTargetingAdmin || isTargetingLogin) && !localStorage.getItem('token');
+  });
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [userLoggedIn, setUserLoggedIn] = useState(() => !!localStorage.getItem('token'));
-  
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
   const [pageRoute, setPageRoute] = useState<'home' | 'verify-email' | 'reset-password' | 'privacy' | 'terms' | 'not-found'>(() => {
     const path = window.location.pathname;
-    if (path === '' || path === '/') return 'home';
+    if (path === '' || path === '/' || path.startsWith('/login') || path.startsWith('/admin')) return 'home';
     if (path.startsWith('/verify-email')) return 'verify-email';
     if (path.startsWith('/reset-password')) return 'reset-password';
     if (path.startsWith('/privacy')) return 'privacy';
@@ -25,23 +41,82 @@ function AppContent() {
     return 'not-found';
   });
 
+  const loadCurrentUser = useCallback(async (expectedRole?: 'USER' | 'ADMIN') => {
+    try {
+      const res = await api.get<UserProfile>('/auth/me');
+      setCurrentUser(res.data);
+      const effectiveRole = res.data.role || expectedRole;
+
+      if (effectiveRole === 'ADMIN') {
+        if (!window.location.hash.startsWith('#admin')) {
+          window.history.replaceState(null, '', '#admin');
+        }
+      } else {
+        // If user is not admin and was on #admin / /admin, redirect to user dashboard
+        if (window.location.hash.startsWith('#admin') || window.location.pathname.startsWith('/admin')) {
+          window.history.replaceState(null, '', '#dashboard');
+        }
+      }
+    } catch {
+      // Token invalid or expired
+      localStorage.removeItem('token');
+      setUserLoggedIn(false);
+      setCurrentUser(null);
+    }
+  }, []);
+
   useEffect(() => {
-    const handlePopState = () => {
+    if (userLoggedIn) {
+      loadCurrentUser();
+    } else {
+      setCurrentUser(null);
+    }
+  }, [userLoggedIn, loadCurrentUser]);
+
+  // Synchronize location changes and strictly guard routes
+  useEffect(() => {
+    const handleLocationSync = () => {
       const path = window.location.pathname;
-      if (path === '' || path === '/') setPageRoute('home');
+      const hash = window.location.hash;
+      const isTargetingAdmin = path.startsWith('/admin') || hash.startsWith('#admin');
+      const isTargetingLogin = path.startsWith('/login') || hash.startsWith('#login');
+
+      if (path === '' || path === '/' || isTargetingAdmin || isTargetingLogin) setPageRoute('home');
       else if (path.startsWith('/verify-email')) setPageRoute('verify-email');
       else if (path.startsWith('/reset-password')) setPageRoute('reset-password');
       else if (path.startsWith('/privacy')) setPageRoute('privacy');
       else if (path.startsWith('/terms')) setPageRoute('terms');
       else setPageRoute('not-found');
+
+      if (!localStorage.getItem('token') && (isTargetingAdmin || isTargetingLogin)) {
+        setAuthMode('login');
+        setAuthModalOpen(true);
+        return;
+      }
+
+      if (isTargetingAdmin) {
+        if (currentUser && currentUser.role !== 'ADMIN') {
+          window.history.replaceState(null, '', '#dashboard');
+        }
+      } else {
+        if (currentUser?.role === 'ADMIN') {
+          window.history.replaceState(null, '', '#admin');
+        }
+      }
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+
+    window.addEventListener('hashchange', handleLocationSync);
+    window.addEventListener('popstate', handleLocationSync);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationSync);
+      window.removeEventListener('popstate', handleLocationSync);
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
       setUserLoggedIn(false);
+      setCurrentUser(null);
       setAuthMode('login');
       setAuthModalOpen(true);
     };
@@ -49,15 +124,19 @@ function AppContent() {
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
-  const handleOpenAuth = (mode: 'login' | 'register') => {
-    setAuthMode(mode);
-    setAuthModalOpen(true);
-  };
-
-  const handleAuthSuccess = () => {
+  // Unified Auth Success handler for both User and Admin
+  const handleAuthSuccess = (role?: 'USER' | 'ADMIN') => {
     setUserLoggedIn(true);
+    setAuthModalOpen(false);
+    if (role === 'ADMIN') {
+      window.history.replaceState(null, '', '#admin');
+    } else if (role === 'USER') {
+      window.history.replaceState(null, '', '#dashboard');
+    }
+    loadCurrentUser(role);
   };
 
+  // Unified Logout handler
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('fintrack_active_tab');
@@ -65,9 +144,42 @@ function AppContent() {
       window.history.replaceState(null, '', window.location.pathname);
     }
     setUserLoggedIn(false);
+    setCurrentUser(null);
+    window.history.replaceState(null, '', '/');
   };
 
-  // If route does not exist, render NotFoundPage for both guests and authenticated users
+  const handleOpenAuth = (mode: 'login' | 'register') => {
+    setAuthMode(mode);
+    setAuthModalOpen(true);
+  };
+
+  // =========================================================
+  // 1. ADMIN PORTAL (Rendered when authenticated as ADMIN)
+  // =========================================================
+  if (userLoggedIn && currentUser?.role === 'ADMIN') {
+    return (
+      <AdminLayout
+        userName={currentUser?.name || 'Administrator'}
+        userEmail={currentUser?.email || ''}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // =========================================================
+  // 2. USER DASHBOARD (Rendered when authenticated as USER)
+  // =========================================================
+  if (userLoggedIn && currentUser?.role === 'USER') {
+    return (
+      <DashboardPage
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // =========================================================
+  // 3. SPECIAL PUBLIC PAGES (Privacy, Terms, Not Found)
+  // =========================================================
   if (pageRoute === 'not-found') {
     return (
       <NotFoundPage
@@ -112,11 +224,9 @@ function AppContent() {
     );
   }
 
-  // If user is authenticated, render the Dashboard View directly
-  if (userLoggedIn) {
-    return <DashboardPage onLogout={handleLogout} />;
-  }
-
+  // =========================================================
+  // 4. UNAUTHENTICATED LANDING & UNIFIED AUTH FLOW
+  // =========================================================
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg)', color: 'var(--main-text)' }}>
       {/* Navigation Bar with Dark Mode Toggle */}
@@ -155,7 +265,7 @@ function AppContent() {
         <LandingPage onOpenAuth={handleOpenAuth} />
       )}
 
-      {/* Auth Modal (Login / Register / Forgot Password) */}
+      {/* Unified Auth Modal for both User and Admin */}
       <AuthModal
         isOpen={authModalOpen}
         initialMode={authMode}

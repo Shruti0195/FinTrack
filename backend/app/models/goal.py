@@ -40,3 +40,25 @@ class GoalContribution(Base):
     note = Column(String(200), nullable=True)
     contributed_at = Column(Date, server_default=func.current_date(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class GoalIcon(Base):
+    __tablename__ = "goal_icons"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(60), nullable=False, unique=True)
+    icon_key = Column(String(50), nullable=False, unique=True)
+    is_default = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class GoalColor(Base):
+    __tablename__ = "goal_colors"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(60), nullable=False, unique=True)
+    hex = Column(String(10), nullable=False, unique=True)
+    is_default = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

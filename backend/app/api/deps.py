@@ -30,7 +30,7 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated. Please contact support.",
+            detail="This account is currently disabled. Please contact support.",
         )
 
     # Invalidate other devices/sessions if password was changed

@@ -8,7 +8,9 @@ import {
   AlertCircle,
   ExternalLink,
   Lock,
-  Shield
+  Shield,
+  HelpCircle,
+  Send
 } from 'lucide-react';
 import api from '../api/client';
 import { ChangePasswordModal } from './ChangePasswordModal';
@@ -88,6 +90,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
       setFeedback({ msg: err.response?.data?.detail || 'Failed to update settings.', type: 'error' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Report a problem state
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportDesc, setReportDesc] = useState('');
+  const [reportPage, setReportPage] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportFeedback, setReportFeedback] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const handleReportProblem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportDesc.trim()) return;
+
+    setSubmittingReport(true);
+    setReportFeedback(null);
+    try {
+      const res = await api.post('/user/issues', {
+        title: reportTitle.trim() || undefined,
+        description: reportDesc.trim(),
+        page: reportPage.trim() || undefined
+      });
+      setReportFeedback({
+        msg: res.data.message || 'Thank you for reporting this! Our team has received your report and will look into it.',
+        type: 'success'
+      });
+      setReportTitle('');
+      setReportDesc('');
+      setReportPage('');
+    } catch (err: any) {
+      setReportFeedback({
+        msg: err.response?.data?.detail || 'Failed to submit report. Please try again.',
+        type: 'error'
+      });
+    } finally {
+      setSubmittingReport(false);
     }
   };
 
@@ -415,6 +453,128 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
         onClose={() => setIsPasswordModalOpen(false)}
         userEmail={profile.email}
       />
+
+      {/* 4. HELP & REPORT A PROBLEM SECTION */}
+      <div className="card-box" style={{ padding: '24px', marginTop: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(245, 158, 11, 0.12)',
+            color: '#F59E0B',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <HelpCircle size={20} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
+              Help & Support — Report a Problem
+            </h3>
+            <p style={{ fontSize: '12.5px', color: 'var(--secondary-text)', margin: 0 }}>
+              Ran into a glitch or have feedback? Let our team know so we can assist you.
+            </p>
+          </div>
+        </div>
+
+        {reportFeedback && (
+          <div style={{
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-btn)',
+            backgroundColor: reportFeedback.type === 'success' ? 'var(--light-accent)' : 'var(--light-danger)',
+            border: reportFeedback.type === 'success' ? '1px solid var(--accent)' : '1px solid var(--danger)',
+            color: reportFeedback.type === 'success' ? 'var(--accent)' : 'var(--danger)',
+            fontSize: '13.5px',
+            fontWeight: 600,
+            marginBottom: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            {reportFeedback.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
+            <span>{reportFeedback.msg}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleReportProblem} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                Summary / Topic (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Export button not responding, typo in category"
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                className="input-field"
+                style={{ height: '40px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+                Page / Feature (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., /expenses, Dashboard, Budgets"
+                value={reportPage}
+                onChange={(e) => setReportPage(e.target.value)}
+                className="input-field"
+                style={{ height: '40px' }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--main-text)', marginBottom: '6px' }}>
+              What went wrong? (Required)
+            </label>
+            <textarea
+              required
+              rows={3}
+              placeholder="Please describe what happened or what isn't working as expected..."
+              value={reportDesc}
+              onChange={(e) => setReportDesc(e.target.value)}
+              className="input-field"
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                fontSize: '13.5px',
+                boxSizing: 'border-box',
+                resize: 'vertical',
+                minHeight: '80px'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="submit"
+              disabled={submittingReport || !reportDesc.trim()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                backgroundColor: '#10B981',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 'var(--radius-btn)',
+                fontSize: '13.5px',
+                fontWeight: 700,
+                cursor: submittingReport || !reportDesc.trim() ? 'not-allowed' : 'pointer',
+                opacity: submittingReport || !reportDesc.trim() ? 0.6 : 1
+              }}
+            >
+              <Send size={15} />
+              <span>{submittingReport ? 'Sending...' : 'Report Problem'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

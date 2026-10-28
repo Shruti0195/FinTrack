@@ -9,14 +9,6 @@ import {
   TrendingUp,
   Award,
   X,
-  Smartphone,
-  Plane,
-  ShieldCheck,
-  Home,
-  Car,
-  Laptop,
-  Gift,
-  Heart,
   Zap,
   Bell,
   BellOff,
@@ -36,8 +28,12 @@ import {
   getGoalAlertPauseStatus,
   pauseGoalAlerts,
   resumeGoalAlerts,
-  getGoalAlertSettings
+  getGoalAlertSettings,
+  getGoalOptions,
+  type GoalIconOption,
+  type GoalColorOption
 } from '../api/goals';
+import { renderGoalIcon } from '../utils/goalIcons';
 import { GoalAlertSettingsModal, formatGoalAlertPreview, formatGoalCardBellSummary } from './GoalAlertSettingsModal';
 import { PauseAlertsModal } from './PauseAlertsModal';
 import { PeriodCapsule } from './PeriodCapsule';
@@ -72,33 +68,27 @@ const formatDate = (dateStr?: string | null) => {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const COLOR_PALETTE = [
-  { name: 'Emerald Green', hex: '#10B981' },
-  { name: 'Deep Navy', hex: '#0F172A' },
-  { name: 'Royal Blue', hex: '#3B82F6' },
-  { name: 'Violet', hex: '#8B5CF6' },
-  { name: 'Rose', hex: '#EC4899' },
-  { name: 'Amber', hex: '#F59E0B' }
+const DEFAULT_COLOR_PALETTE: GoalColorOption[] = [
+  { id: 'emerald', name: 'Emerald Green', hex: '#10B981' },
+  { id: 'navy', name: 'Deep Navy', hex: '#0F172A' },
+  { id: 'blue', name: 'Royal Blue', hex: '#3B82F6' },
+  { id: 'violet', name: 'Violet', hex: '#8B5CF6' },
+  { id: 'rose', name: 'Rose', hex: '#EC4899' },
+  { id: 'amber', name: 'Amber', hex: '#F59E0B' }
 ];
 
-const ICON_OPTIONS = [
-  { id: 'target', label: 'Target', IconComp: Target },
-  { id: 'phone', label: 'Phone', IconComp: Smartphone },
-  { id: 'plane', label: 'Travel', IconComp: Plane },
-  { id: 'shield', label: 'Emergency', IconComp: ShieldCheck },
-  { id: 'home', label: 'Home', IconComp: Home },
-  { id: 'car', label: 'Vehicle', IconComp: Car },
-  { id: 'laptop', label: 'Gadget', IconComp: Laptop },
-  { id: 'gift', label: 'Gift', IconComp: Gift },
-  { id: 'sparkles', label: 'Dream', IconComp: Sparkles },
-  { id: 'heart', label: 'Personal', IconComp: Heart }
+const DEFAULT_ICON_OPTIONS: GoalIconOption[] = [
+  { id: 'target', name: 'Target', icon_key: 'target' },
+  { id: 'phone', name: 'Phone', icon_key: 'phone' },
+  { id: 'plane', name: 'Travel', icon_key: 'plane' },
+  { id: 'shield', name: 'Emergency', icon_key: 'shield' },
+  { id: 'home', name: 'Home', icon_key: 'home' },
+  { id: 'car', name: 'Vehicle', icon_key: 'car' },
+  { id: 'laptop', name: 'Gadget', icon_key: 'laptop' },
+  { id: 'gift', name: 'Gift', icon_key: 'gift' },
+  { id: 'sparkles', name: 'Dream', icon_key: 'sparkles' },
+  { id: 'heart', name: 'Personal', icon_key: 'heart' }
 ];
-
-const renderGoalIcon = (iconId: string, size = 20, color = '#10B981') => {
-  const found = ICON_OPTIONS.find((i) => i.id === iconId);
-  const Component = found ? found.IconComp : Target;
-  return <Component size={size} color={color} />;
-};
 
 export interface GoalsViewProps {
   highlightedGoalId?: string | null;
@@ -118,6 +108,8 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   // State
   const [goals, setGoals] = useState<Goal[]>([]);
   const [summary, setSummary] = useState<GoalSummary | null>(null);
+  const [availableIcons, setAvailableIcons] = useState<GoalIconOption[]>(DEFAULT_ICON_OPTIONS);
+  const [availableColors, setAvailableColors] = useState<GoalColorOption[]>(DEFAULT_COLOR_PALETTE);
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'completed'>('all');
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -256,6 +248,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
       setSummary(summaryData);
       setIsAlertsPaused(pauseStatus.is_paused);
       setPausedUntil(pauseStatus.paused_until || null);
+      getGoalOptions().then((opts) => {
+        if (opts.icons && opts.icons.length > 0) setAvailableIcons(opts.icons);
+        if (opts.colors && opts.colors.length > 0) setAvailableColors(opts.colors);
+      }).catch((e) => console.error('Failed to load goal options:', e));
     } catch (err) {
       console.error('Failed to load goals:', err);
     } finally {
@@ -1403,8 +1399,8 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                     className="input-field"
                     style={{ height: '38px', fontSize: '13px' }}
                   >
-                    {ICON_OPTIONS.map((i) => (
-                      <option key={i.id} value={i.id}>{i.label}</option>
+                    {availableIcons.map((i) => (
+                      <option key={i.id || i.icon_key} value={i.icon_key}>{i.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1414,10 +1410,11 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                     Color Tag
                   </label>
                   <div style={{ display: 'flex', gap: '6px', height: '38px', alignItems: 'center' }}>
-                    {COLOR_PALETTE.map((c) => (
+                    {availableColors.map((c) => (
                       <button
-                        key={c.hex}
+                        key={c.id || c.hex}
                         type="button"
+                        title={c.name}
                         onClick={() => setFormColor(c.hex)}
                         style={{
                           width: '24px',

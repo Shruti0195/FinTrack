@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.models.goal import Goal, GoalContribution
+from app.models.goal import Goal, GoalContribution, GoalIcon, GoalColor
+from pydantic import BaseModel
 from app.schemas.goal import (
     GoalOut,
     GoalCreate,
@@ -440,6 +441,37 @@ def create_goal(
     return GoalOut(**details)
 
 
+class GoalOptionIcon(BaseModel):
+    id: str
+    name: str
+    icon_key: str
+
+class GoalOptionColor(BaseModel):
+    id: str
+    name: str
+    hex: str
+
+class GoalOptionsResponse(BaseModel):
+    icons: List[GoalOptionIcon]
+    colors: List[GoalOptionColor]
+
+@router.get("/options", response_model=GoalOptionsResponse)
+def get_goal_options(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns available goal icons and color tags managed by the Admin.
+    """
+    icons = db.query(GoalIcon).order_by(GoalIcon.created_at.asc()).all()
+    colors = db.query(GoalColor).order_by(GoalColor.created_at.asc()).all()
+
+    return GoalOptionsResponse(
+        icons=[GoalOptionIcon(id=str(i.id), name=i.name, icon_key=i.icon_key) for i in icons],
+        colors=[GoalOptionColor(id=str(c.id), name=c.name, hex=c.hex) for c in colors],
+    )
+
+
 @router.get("/{goal_id}", response_model=GoalOut)
 def get_goal_detail(
     goal_id: uuid.UUID,
@@ -705,3 +737,5 @@ def delete_contribution(
 
     details = calculate_goal_details(goal, contributions)
     return GoalOut(**details)
+
+

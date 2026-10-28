@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle2, AlertCircle, ArrowRight, Mail, Lock, User as UserIcon } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, ArrowRight, Mail, Lock, User as UserIcon, ShieldCheck } from 'lucide-react';
 import api from '../api/client';
 
 interface AuthModalProps {
   isOpen: boolean;
   initialMode: 'login' | 'register';
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (role?: 'USER' | 'ADMIN') => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -96,13 +96,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         });
 
         localStorage.setItem('token', res.data.access_token);
-        setSuccessMsg('Login successful! Redirecting...');
+        const userRole: 'USER' | 'ADMIN' | undefined = res.data.role;
+        setSuccessMsg(
+          userRole === 'ADMIN'
+            ? 'Administrator login successful! Redirecting to Admin Panel...'
+            : 'Login successful! Redirecting to Dashboard...'
+        );
         resetForm();
 
         setTimeout(() => {
-          onSuccess();
+          onSuccess(userRole);
           onClose();
-        }, 600);
+        }, 500);
       }
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Authentication failed. Please verify your details.';
@@ -391,6 +396,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <>Remember your password? <span onClick={() => switchMode('login')} style={{ color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}>Back to Log In</span></>
             )}
           </div>
+          {mode === 'login' && (
+            <div style={{
+              marginTop: '16px',
+              paddingTop: '12px',
+              borderTop: '1px solid var(--border)',
+              textAlign: 'center'
+            }}>
+              <a
+                href="#admin"
+                onClick={() => onClose()}
+                style={{
+                  fontSize: '12px',
+                  color: 'var(--secondary-text)',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--card-subtle)',
+                  border: '1px solid var(--border)',
+                  cursor: 'pointer'
+                }}
+              >
+                <ShieldCheck size={14} style={{ color: '#10B981' }} />
+                <span>FinTrack Administrator? <strong style={{ color: 'var(--main-text)' }}>Go to Admin Portal &rarr;</strong></span>
+              </a>
+            </div>
+          )}
         </form>
       </div>
     </div>

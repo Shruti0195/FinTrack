@@ -22,16 +22,32 @@ class SupportReportCreate(BaseModel):
 
 class SupportReportOut(BaseModel):
     id: uuid.UUID
+    report_number: Optional[int] = 101
     report_type: str
     title: str
     description: str
     page: Optional[str] = None
     status: str
+    closed_reason: Optional[str] = None
+    admin_reply: Optional[str] = None
+    admin_reply_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+class UserReportHistoryItem(BaseModel):
+    id: str
+    actor_name: str  # Always "FinTrack team" for admin actions
+    event_type: str
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
+    message: Optional[str] = None
+    created_at: datetime
+
+class UserReportDetailOut(SupportReportOut):
+    history: List[UserReportHistoryItem]
 
 class SimpleMessageResponse(BaseModel):
     message: str

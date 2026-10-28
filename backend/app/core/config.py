@@ -1,5 +1,8 @@
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "FinTrack"
@@ -21,7 +24,7 @@ class Settings(BaseSettings):
     SUPPORT_EMAIL: str = "fintrack37@gmail.com"
 
     class Config:
-        env_file = ".env"
+        env_file = (str(BASE_DIR / ".env"), ".env")
         extra = "ignore"
         case_sensitive = True
 

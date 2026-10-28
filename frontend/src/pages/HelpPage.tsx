@@ -5,12 +5,18 @@ import {
   Send, 
   RefreshCw, 
   XCircle, 
-  Inbox 
+  Inbox,
+  MessageSquare,
+  X,
+  History,
+  AlertCircle
 } from 'lucide-react';
 import { 
   fetchSupportReports, 
+  fetchSupportReportDetail,
   createSupportReport, 
   type SupportReportItem, 
+  type UserReportDetail,
   type ReportType 
 } from '../api/help';
 import { GettingStartedChecklist } from '../components/GettingStartedChecklist';
@@ -40,6 +46,40 @@ export const HelpPage: React.FC<HelpPageProps> = ({
   const [reports, setReports] = useState<SupportReportItem[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
+
+  // Detail Modal State
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [reportDetail, setReportDetail] = useState<UserReportDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  const handleOpenDetail = async (id: string) => {
+    setSelectedReportId(id);
+    setLoadingDetail(true);
+    setDetailError(null);
+    try {
+      const data = await fetchSupportReportDetail(id);
+      setReportDetail(data);
+    } catch (err: any) {
+      setDetailError('Failed to load report detail. Please retry.');
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const getUserStatusBadge = (st: string) => {
+    const s = st.toLowerCase();
+    if (s === 'open') {
+      return { bg: 'rgba(59, 130, 246, 0.12)', color: '#3B82F6', border: 'rgba(59, 130, 246, 0.3)' };
+    }
+    if (s === 'in progress' || s === 'in_progress') {
+      return { bg: 'rgba(139, 92, 246, 0.12)', color: '#8B5CF6', border: 'rgba(139, 92, 246, 0.3)' };
+    }
+    if (s === 'resolved') {
+      return { bg: 'rgba(16, 185, 129, 0.12)', color: '#10B981', border: 'rgba(16, 185, 129, 0.3)' };
+    }
+    return { bg: 'rgba(100, 116, 139, 0.15)', color: '#64748B', border: 'rgba(100, 116, 139, 0.3)' };
+  };
 
   // Load Reports
   const loadReports = async () => {
@@ -459,7 +499,7 @@ export const HelpPage: React.FC<HelpPageProps> = ({
               Reports you send will appear here.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {reports.map((item) => {
                 const dateStr = new Date(item.created_at).toLocaleDateString(undefined, {
                   year: 'numeric',
@@ -471,22 +511,44 @@ export const HelpPage: React.FC<HelpPageProps> = ({
                   : item.report_type === 'I have a question'
                   ? '#F59E0B'
                   : 'var(--accent)';
+                const statusSt = getUserStatusBadge(item.status);
 
                 return (
                   <div
                     key={item.id}
+                    onClick={() => handleOpenDetail(item.id)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        handleOpenDetail(item.id);
+                      }
+                    }}
                     style={{
-                      padding: '12px 16px',
+                      padding: '14px 18px',
                       borderRadius: '8px',
                       backgroundColor: 'var(--card-subtle)',
                       border: '1px solid var(--border)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '6px'
+                      gap: '8px',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.15s ease, transform 0.1s ease',
+                      outline: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--accent)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.transform = 'none';
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#3B82F6' }}>
+                          #{item.report_number || '101'}
+                        </span>
                         <span style={{
                           fontSize: '11px',
                           fontWeight: 700,
@@ -498,9 +560,9 @@ export const HelpPage: React.FC<HelpPageProps> = ({
                           {item.report_type}
                         </span>
                         <span style={{
-                          fontWeight: 600,
-                          fontSize: '13.5px',
-                          color: 'var(--primary)',
+                          fontWeight: 700,
+                          fontSize: '14px',
+                          color: 'var(--main-text)',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
@@ -526,13 +588,13 @@ export const HelpPage: React.FC<HelpPageProps> = ({
                           {dateStr}
                         </span>
                         <span style={{
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          padding: '2px 8px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          padding: '3px 10px',
                           borderRadius: '12px',
-                          backgroundColor: 'var(--light-accent)',
-                          color: 'var(--accent)',
-                          border: '1px solid rgba(16, 185, 129, 0.2)'
+                          backgroundColor: statusSt.bg,
+                          color: statusSt.color,
+                          border: `1px solid ${statusSt.border}`
                         }}>
                           {item.status}
                         </span>
@@ -540,18 +602,309 @@ export const HelpPage: React.FC<HelpPageProps> = ({
                     </div>
 
                     <div style={{
-                      fontSize: '12.5px',
+                      fontSize: '13px',
                       color: 'var(--secondary-text)',
                       lineHeight: 1.5,
                       whiteSpace: 'pre-wrap'
                     }}>
                       {item.description}
                     </div>
+
+                    {item.admin_reply && (
+                      <div style={{
+                        marginTop: '4px',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '12px',
+                        color: 'var(--main-text)'
+                      }}>
+                        <MessageSquare size={14} color="#10B981" />
+                        <span><strong>FinTrack team replied:</strong> {item.admin_reply.slice(0, 80)}{item.admin_reply.length > 80 ? '...' : ''}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
+
+          {/* User Report Detail Modal */}
+            {selectedReportId && (
+              <div style={{
+                position: 'fixed',
+                inset: 0,
+                backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                backdropFilter: 'blur(4px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '16px'
+              }}>
+                <div style={{
+                  backgroundColor: 'var(--card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-card)',
+                  maxWidth: '560px',
+                  width: '100%',
+                  maxHeight: '90vh',
+                  overflowY: 'auto',
+                  boxShadow: 'var(--shadow-lg)',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  {/* Modal Header */}
+                  <div style={{
+                    padding: '18px 24px',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    position: 'sticky',
+                    top: 0,
+                    backgroundColor: 'var(--card)',
+                    zIndex: 1
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#3B82F6' }}>
+                        #{reportDetail?.report_number || '...'}
+                      </span>
+                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--main-text)' }}>
+                        Report Details
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedReportId(null);
+                        setReportDetail(null);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--secondary-text)',
+                        cursor: 'pointer',
+                        padding: '4px'
+                      }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* Modal Body */}
+                  <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {loadingDetail ? (
+                      <div style={{ padding: '36px', textAlign: 'center', color: 'var(--secondary-text)', fontSize: '13.5px' }}>
+                        Loading details...
+                      </div>
+                    ) : detailError ? (
+                      <div style={{ padding: '24px', textAlign: 'center' }}>
+                        <AlertCircle size={28} color="#EF4444" style={{ marginBottom: '8px' }} />
+                        <div style={{ color: '#EF4444', fontSize: '13px', marginBottom: '12px' }}>{detailError}</div>
+                        <button
+                          onClick={() => handleOpenDetail(selectedReportId)}
+                          style={{
+                            padding: '6px 14px',
+                            borderRadius: '6px',
+                            backgroundColor: 'var(--card-subtle)',
+                            border: '1px solid var(--border)',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : reportDetail ? (
+                      <>
+                        {/* Report Header Card */}
+                        <div style={{
+                          padding: '16px',
+                          borderRadius: '8px',
+                          backgroundColor: 'var(--card-subtle)',
+                          border: '1px solid var(--border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                            <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--main-text)' }}>
+                              {reportDetail.title}
+                            </div>
+                            <span style={{
+                              ...getUserStatusBadge(reportDetail.status),
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              {reportDetail.status}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--secondary-text)' }}>
+                            <span>{reportDetail.report_type}</span>
+                            {reportDetail.page && (
+                              <>
+                                <span>•</span>
+                                <span>Page: {reportDetail.page}</span>
+                              </>
+                            )}
+                            <span>•</span>
+                            <span>{new Date(reportDetail.created_at).toLocaleDateString()}</span>
+                          </div>
+
+                          {/* Message Body */}
+                          <div style={{
+                            padding: '12px',
+                            borderRadius: '6px',
+                            backgroundColor: 'var(--card)',
+                            border: '1px solid var(--border)',
+                            fontSize: '13px',
+                            color: 'var(--main-text)',
+                            lineHeight: 1.5,
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            {reportDetail.description}
+                          </div>
+                        </div>
+
+                        {/* Admin Team Reply (if any) */}
+                        {reportDetail.admin_reply && (
+                          <div style={{
+                            padding: '16px',
+                            borderRadius: '8px',
+                            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                            border: '1px solid #10B981',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <CheckCircle2 size={16} color="#10B981" />
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#10B981' }}>
+                                Response from FinTrack Team
+                              </span>
+                            </div>
+                            <div style={{
+                              fontSize: '13.5px',
+                              color: 'var(--main-text)',
+                              lineHeight: 1.5,
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              {reportDetail.admin_reply}
+                            </div>
+                            {reportDetail.admin_reply_at && (
+                              <div style={{ fontSize: '11px', color: 'var(--secondary-text)', marginTop: '2px' }}>
+                                Replied {new Date(reportDetail.admin_reply_at).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Closed Reason Notice (if closed) */}
+                        {reportDetail.status === 'Closed' && reportDetail.closed_reason && (
+                          <div style={{
+                            padding: '12px 14px',
+                            borderRadius: '6px',
+                            backgroundColor: 'var(--card-subtle)',
+                            border: '1px solid var(--border)',
+                            fontSize: '12.5px',
+                            color: 'var(--secondary-text)'
+                          }}>
+                            <strong>Closing outcome:</strong> {reportDetail.closed_reason}
+                          </div>
+                        )}
+
+                        {/* Status History Timeline */}
+                        {reportDetail.history && reportDetail.history.length > 0 && (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                              <History size={14} color="#3B82F6" />
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--main-text)' }}>
+                                Status Timeline
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {reportDetail.history.map((hist, idx) => (
+                                <div key={hist.id || idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                  <div style={{
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#3B82F6',
+                                    marginTop: '5px',
+                                    flexShrink: 0
+                                  }} />
+                                  <div style={{ flex: 1, fontSize: '12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                      <span style={{ fontWeight: 600, color: 'var(--main-text)' }}>
+                                        {hist.actor_name}
+                                      </span>
+                                      <span style={{ color: 'var(--secondary-text)', fontSize: '11px' }}>
+                                        {new Date(hist.created_at).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <div style={{ color: 'var(--secondary-text)', marginTop: '2px' }}>
+                                      {hist.message || hist.event_type}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{
+                          padding: '10px 14px',
+                          borderRadius: '6px',
+                          backgroundColor: 'var(--card-subtle)',
+                          fontSize: '11.5px',
+                          color: 'var(--secondary-text)',
+                          lineHeight: 1.4
+                        }}>
+                          ℹ️ Reports cannot be modified or deleted after sending. Our team reviews all submissions.
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div style={{
+                    padding: '14px 24px',
+                    borderTop: '1px solid var(--border)',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    backgroundColor: 'var(--card)'
+                  }}>
+                    <button
+                      onClick={() => {
+                        setSelectedReportId(null);
+                        setReportDetail(null);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: 'var(--radius-btn)',
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--card-subtle)',
+                        color: 'var(--main-text)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            )}
         </div>
       </section>
 

@@ -14,6 +14,8 @@ class ReportedIssue(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     title = Column(String(150), nullable=False)
     description = Column(Text, nullable=True)
+    page = Column(String(100), nullable=True)
+    admin_note = Column(Text, nullable=True)
     status = Column(issue_status_enum, nullable=False, default='open')
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     resolved_at = Column(DateTime(timezone=True), nullable=True)

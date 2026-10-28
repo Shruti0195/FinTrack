@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
@@ -8,11 +9,13 @@ from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.budget import Budget
 from app.models.goal import Goal
-from app.models.support_report import SupportReport
+from app.models.support_report import SupportReport, SupportReportHistory
 from app.schemas.help import (
     ChecklistStatus,
     SupportReportCreate,
     SupportReportOut,
+    UserReportDetailOut,
+    UserReportHistoryItem,
     SimpleMessageResponse
 )
 from app.services.email_service import send_support_report_email
@@ -99,11 +102,78 @@ def get_user_support_reports(
 ):
     """
     Returns the list of support reports and suggestions submitted by the current user.
+    Strict Privacy: Users only ever see their own reports.
     """
     reports = db.query(SupportReport).filter(
         SupportReport.user_id == current_user.id
     ).order_by(SupportReport.created_at.desc()).all()
     return reports
+
+@router.get("/reports/{report_id}", response_model=UserReportDetailOut)
+def get_user_support_report_detail(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns full details of a specific user report including public timeline history.
+    Strict Privacy:
+    - Users see only their own reports.
+    - Never exposes internal notes.
+    - Masks any admin actor names to 'FinTrack team'.
+    """
+    try:
+        report_uuid = uuid.UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid report ID format.")
+
+    report = db.query(SupportReport).filter(
+        SupportReport.id == report_uuid,
+        SupportReport.user_id == current_user.id
+    ).first()
+
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    # Fetch public history events ONLY (exclude is_internal)
+    raw_history = (
+        db.query(SupportReportHistory)
+        .filter(
+            SupportReportHistory.report_id == report.id,
+            SupportReportHistory.is_internal == False
+        )
+        .order_by(SupportReportHistory.created_at.asc())
+        .all()
+    )
+
+    history = [
+        UserReportHistoryItem(
+            id=str(h.id),
+            actor_name="FinTrack team" if h.actor_type == "ADMIN" else current_user.name,
+            event_type=h.event_type,
+            old_status=h.old_status,
+            new_status=h.new_status,
+            message=h.message,
+            created_at=h.created_at
+        )
+        for h in raw_history
+    ]
+
+    return UserReportDetailOut(
+        id=report.id,
+        report_number=report.report_number or 101,
+        report_type=report.report_type,
+        title=report.title,
+        description=report.description,
+        page=report.page,
+        status=report.status,
+        closed_reason=report.closed_reason,
+        admin_reply=report.admin_reply,
+        admin_reply_at=report.admin_reply_at,
+        created_at=report.created_at,
+        updated_at=report.updated_at,
+        history=history,
+    )
 
 @router.post("/reports", response_model=SupportReportOut, status_code=status.HTTP_201_CREATED)
 def submit_support_report(
@@ -158,7 +228,19 @@ def submit_support_report(
     db.commit()
     db.refresh(new_report)
 
-    # Dispatch email notification in background
+    # Initial history timeline entry
+    init_hist = SupportReportHistory(
+        report_id=new_report.id,
+        actor_type="USER",
+        actor_name=current_user.name,
+        event_type="created",
+        message="Report submitted",
+        is_internal=False
+    )
+    db.add(init_hist)
+    db.commit()
+
+    # Dispatch email notification to support team in background
     background_tasks.add_task(
         send_support_report_email,
         user_name=current_user.name,

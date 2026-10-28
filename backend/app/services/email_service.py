@@ -223,6 +223,12 @@ def send_verification_email(email_to: str, name: str, token: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to send email to {email_to}: {str(e)}")
         print(f"[ERROR] Failed to send email via Gmail: {str(e)}")
+        print("\n" + "=" * 65)
+        print("[FALLBACK: EMAIL VERIFICATION LINK (Gmail SMTP Failed)]")
+        print(f"Recipient: {name} <{email_to}>")
+        print(f"Activation Link: {verification_url}")
+        print("Reason: Gmail rejected credentials (535 BadCredentials). Update SMTP_PASSWORD in backend/.env")
+        print("=" * 65 + "\n")
         return False
 
 def send_password_reset_email(email_to: str, name: str, token: str) -> bool:
@@ -268,6 +274,12 @@ def send_password_reset_email(email_to: str, name: str, token: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to send password reset email to {email_to}: {str(e)}")
         print(f"[ERROR] Failed to send password reset email via Gmail: {str(e)}")
+        print("\n" + "=" * 65)
+        print("[FALLBACK: PASSWORD RESET LINK (Gmail SMTP Failed)]")
+        print(f"Recipient: {name} <{email_to}>")
+        print(f"Password Reset Link: {reset_url}")
+        print("Reason: Gmail rejected credentials (535 BadCredentials). Update SMTP_PASSWORD in backend/.env")
+        print("=" * 65 + "\n")
         return False
 
 def generate_budget_alert_email_html(
@@ -860,3 +872,164 @@ def send_password_changed_email(
         return False
 
 
+
+
+def generate_support_report_update_email_html(
+    name: str,
+    report_title: str,
+    status: str,
+    reply: str = "",
+    help_url: str = f"{settings.FRONTEND_URL}/help"
+) -> str:
+    status_color = "#10B981" if status.lower() == "resolved" else "#64748B" if status.lower() == "closed" else "#3B82F6"
+    
+    reply_section = ""
+    if reply and reply.strip():
+        reply_section = f"""
+        <div style="background-color: #F1F5F9; border-left: 4px solid {status_color}; border-radius: 4px; padding: 14px 16px; margin: 20px 0;">
+          <p style="margin: 0 0 4px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">Message from FinTrack Team:</p>
+          <p style="margin: 0; font-size: 14px; color: #1E293B; white-space: pre-wrap; line-height: 1.5;">{reply}</p>
+        </div>
+        """
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Update on your report</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; line-height: 1.6;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 540px; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <!-- Header Bar -->
+          <tr>
+            <td style="background-color: #0F172A; padding: 24px 32px; text-align: left;">
+              <table role="presentation" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="background-color: #10B981; width: 32px; height: 32px; border-radius: 8px; text-align: center; vertical-align: middle; color: #FFFFFF; font-size: 18px; font-weight: bold;">
+                    💰
+                  </td>
+                  <td style="padding-left: 12px;">
+                    <div style="color: #FFFFFF; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">FinTrack</div>
+                    <div style="color: #94A3B8; font-size: 11px; margin-top: 1px;">Support &amp; Feedback</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 32px;">
+              <h1 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0F172A; line-height: 1.3;">
+                Your report has been updated
+              </h1>
+              <p style="margin: 0 0 16px; font-size: 15px; color: #334155;">
+                Hi <b>{name}</b>,
+              </p>
+              <p style="margin: 0 0 20px; font-size: 14.5px; color: #475569;">
+                The FinTrack team has updated the status of your report <strong>"{report_title}"</strong>:
+              </p>
+
+              <!-- Status Pill -->
+              <div style="margin: 16px 0;">
+                <span style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; background-color: {status_color}1A; color: {status_color}; border: 1px solid {status_color}4D;">
+                  Status: {status}
+                </span>
+              </div>
+
+              {reply_section}
+
+              <p style="margin: 20px 0 24px; font-size: 14px; color: #475569;">
+                You can review the full status timeline and responses anytime on your Help page in FinTrack.
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 24px 0;">
+                <tr>
+                  <td align="center" style="border-radius: 8px; background-color: #10B981;">
+                    <a href="{help_url}" target="_blank" style="display: inline-block; padding: 12px 26px; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 8px; background-color: #10B981;">
+                      View Report in FinTrack &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 20px 32px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #94A3B8;">
+                &copy; 2026 FinTrack. Personal Finance Analytics.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
+
+def send_support_report_update_email(
+    email_to: str,
+    user_name: str,
+    report_title: str,
+    status: str,
+    reply: str = "",
+    help_url: str = f"{settings.FRONTEND_URL}/help"
+) -> bool:
+    subject = f"Update on your report: {report_title}"
+    plain_text = (
+        f"Hi {user_name},\n\n"
+        f"Your report \"{report_title}\" was updated to status: {status}.\n"
+    )
+    if reply and reply.strip():
+        plain_text += f"\nMessage from FinTrack Team:\n{reply}\n"
+    plain_text += f"\nView your report anytime on your Help page: {help_url}\n"
+
+    html_content = generate_support_report_update_email_html(
+        name=user_name,
+        report_title=report_title,
+        status=status,
+        reply=reply,
+        help_url=help_url
+    )
+
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        print("\n" + "=" * 65)
+        print("[DEV MODE: SUPPORT REPORT STATUS UPDATE EMAIL]")
+        print(f"To: {email_to}")
+        print(f"Subject: {subject}")
+        print(f"Details:\n{plain_text}")
+        print("=" * 65 + "\n")
+        return True
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
+        msg["To"] = email_to
+
+        msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+
+        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(settings.SMTP_USER, smtp_password)
+            server.sendmail(settings.SMTP_USER, [email_to], msg.as_string())
+
+        logger.info(f"Support report update email sent to {email_to}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send support report update email to {email_to}: {str(e)}")
+        return False

@@ -675,6 +675,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             © 2026 FinTrack. Personal Finance Analytics. All rights reserved.
           </p>
         </div>
+          <div style={{ marginTop: '10px' }}>
+            <button
+              type="button"
+              onClick={() => onOpenAuth('login')}
+              style={{
+                fontSize: '12px',
+                color: 'var(--secondary-text)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                backgroundColor: 'var(--card-subtle)',
+                border: '1px solid var(--border)',
+                cursor: 'pointer',
+                transition: 'color 0.15s ease'
+              }}
+            >
+              <ShieldCheck size={13} style={{ color: '#10B981' }} />
+              <span>Admin Portal</span>
+            </button>
+          </div>
       </footer>
 
     </div>
