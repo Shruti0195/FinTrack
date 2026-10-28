@@ -91,13 +91,24 @@ export const updateAdminUserStatus = async (userId: string, isActive: boolean): 
   return response.data;
 };
 
-export const resendAdminUserVerification = async (userId: string): Promise<{ message: string; success: boolean }> => {
-  const response = await api.post<{ message: string; success: boolean }>(`/admin/users/${userId}/resend-verification`);
+export interface UserSupportActionResponse {
+  message: string;
+  success: boolean;
+  action_link?: string;
+}
+
+export const resendAdminUserVerification = async (userId: string): Promise<UserSupportActionResponse> => {
+  const response = await api.post<UserSupportActionResponse>(`/admin/users/${userId}/resend-verification`);
   return response.data;
 };
 
-export const sendAdminUserPasswordReset = async (userId: string): Promise<{ message: string; success: boolean }> => {
-  const response = await api.post<{ message: string; success: boolean }>(`/admin/users/${userId}/send-password-reset`);
+export const manuallyVerifyAdminUser = async (userId: string): Promise<UserSupportActionResponse> => {
+  const response = await api.post<UserSupportActionResponse>(`/admin/users/${userId}/manual-verify`);
+  return response.data;
+};
+
+export const sendAdminUserPasswordReset = async (userId: string): Promise<UserSupportActionResponse> => {
+  const response = await api.post<UserSupportActionResponse>(`/admin/users/${userId}/send-password-reset`);
   return response.data;
 };
 

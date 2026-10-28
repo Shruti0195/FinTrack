@@ -39,6 +39,7 @@ class UserStatusUpdate(BaseModel):
 class UserSupportActionResponse(BaseModel):
     message: str
     success: bool = True
+    action_link: Optional[str] = None
 
 @router.get("", response_model=UserListResponse)
 def list_users(
@@ -158,10 +159,39 @@ def admin_resend_verification(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     token = create_email_verification_token(user.id)
+    verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
     background_tasks.add_task(send_verification_email, user.email, user.name, token)
 
     return UserSupportActionResponse(
         message=f"A fresh verification link has been sent to {user.email}.",
+        success=True,
+        action_link=verification_url
+    )
+
+@router.post("/{user_id}/manual-verify", response_model=UserSupportActionResponse)
+def admin_manual_verify_user(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    """
+    ADMIN DIRECT ACTION:
+    Directly activates and marks the user's email as verified in the database.
+    Instantly solves any email delivery blocking or verification issues.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    user.is_verified = True
+    user.is_active = True
+    user.email_verified_at = datetime.now(timezone.utc)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return UserSupportActionResponse(
+        message=f"Account for {user.name} ({user.email}) has been directly verified and activated!",
         success=True
     )
 
@@ -198,10 +228,12 @@ def admin_send_password_reset(
     db.add(reset_record)
     db.commit()
 
+    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
     # Send reset email in background
     background_tasks.add_task(send_password_reset_email, user.email, user.name, reset_token)
 
     return UserSupportActionResponse(
         message=f"Password reset instructions have been sent to {user.email}.",
-        success=True
+        success=True,
+        action_link=reset_url
     )

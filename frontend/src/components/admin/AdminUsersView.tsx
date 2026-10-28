@@ -13,12 +13,15 @@ import {
   RefreshCw,
   X,
   Mail,
-  KeyRound
+  KeyRound,
+  Copy,
+  Check
 } from 'lucide-react';
 import { 
   fetchAdminUsers, 
   updateAdminUserStatus, 
   resendAdminUserVerification,
+  manuallyVerifyAdminUser,
   sendAdminUserPasswordReset,
   type AdminUserItem, 
   type UserListParams 
@@ -53,26 +56,50 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ currentAdminEmai
     type: 'resend_verification' | 'password_reset';
   } | null>(null);
 
-  const handleExecuteSupportAction = async () => {
+  const [generatedLink, setGeneratedLink] = useState<{ url: string; label: string } | null>(null);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const handleExecuteSupportAction = async (isManualDirectVerify: boolean = false) => {
     if (!supportActionTarget) return;
     const { user, type } = supportActionTarget;
 
     try {
       setActionLoading(user.id);
       if (type === 'resend_verification') {
+        if (isManualDirectVerify) {
+          const res = await manuallyVerifyAdminUser(user.id);
+          setToastMessage({
+            type: 'success',
+            text: res.message || `Account for ${user.name} has been directly verified and activated!`
+          });
+          setSupportActionTarget(null);
+          await loadUsers();
+          return;
+        }
+
         const res = await resendAdminUserVerification(user.id);
         setToastMessage({
           type: 'success',
           text: res.message || `Verification link sent to ${user.email}.`
         });
+        if (res.action_link) {
+          setGeneratedLink({ url: res.action_link, label: 'Email Verification Link' });
+        } else {
+          setSupportActionTarget(null);
+        }
       } else {
         const res = await sendAdminUserPasswordReset(user.id);
         setToastMessage({
           type: 'success',
           text: res.message || `Password reset link sent to ${user.email}.`
         });
+        if (res.action_link) {
+          setGeneratedLink({ url: res.action_link, label: 'Password Reset Link' });
+        } else {
+          setSupportActionTarget(null);
+        }
       }
-      setSupportActionTarget(null);
+      await loadUsers();
     } catch (err: any) {
       console.error('Failed to execute support action:', err);
       const msg = err?.response?.data?.detail || 'Failed to execute support action.';
@@ -974,57 +1001,161 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ currentAdminEmai
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setSupportActionTarget(null)}
-                disabled={actionLoading !== null}
-                style={{
-                  padding: '9px 16px',
-                  backgroundColor: 'transparent',
-                  color: 'var(--secondary-text)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-btn, 8px)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
+            {/* If link was generated, display copy box */}
+            {generatedLink ? (
+              <div>
+                <div style={{
+                  padding: '14px',
+                  backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: '8px',
+                  marginBottom: '18px'
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#10B981', marginBottom: '6px' }}>
+                    {generatedLink.label} Ready:
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      readOnly
+                      value={generatedLink.url}
+                      style={{
+                        flex: 1,
+                        padding: '7px 10px',
+                        fontSize: '12px',
+                        backgroundColor: 'var(--card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '6px',
+                        color: 'var(--main-text)',
+                        outline: 'none'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedLink.url);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '7px 14px',
+                        backgroundColor: copied ? '#10B981' : 'var(--card)',
+                        color: copied ? '#FFFFFF' : 'var(--main-text)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {copied ? <Check size={14} /> : <Copy size={14} />}
+                      <span>{copied ? 'Copied!' : 'Copy Link'}</span>
+                    </button>
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                onClick={handleExecuteSupportAction}
-                disabled={actionLoading !== null}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '9px 18px',
-                  backgroundColor: supportActionTarget.type === 'resend_verification' ? '#10B981' : '#8B5CF6',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: 'var(--radius-btn, 8px)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: actionLoading !== null ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {actionLoading !== null ? (
-                  <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                ) : supportActionTarget.type === 'resend_verification' ? (
-                  <Mail size={15} />
-                ) : (
-                  <KeyRound size={15} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGeneratedLink(null);
+                      setSupportActionTarget(null);
+                    }}
+                    style={{
+                      padding: '8px 18px',
+                      backgroundColor: 'var(--card-subtle)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-btn, 8px)',
+                      color: 'var(--main-text)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSupportActionTarget(null)}
+                  disabled={actionLoading !== null}
+                  style={{
+                    padding: '9px 16px',
+                    backgroundColor: 'transparent',
+                    color: 'var(--secondary-text)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-btn, 8px)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+
+                {supportActionTarget.type === 'resend_verification' && (
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSupportAction(true)}
+                    disabled={actionLoading !== null}
+                    title="Directly verifies and activates the account in DB without waiting for email delivery"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '9px 16px',
+                      backgroundColor: '#10B981',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: 'var(--radius-btn, 8px)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: actionLoading !== null ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <CheckCircle2 size={15} />
+                    <span>Directly Activate Account</span>
+                  </button>
                 )}
-                <span>
-                  {supportActionTarget.type === 'resend_verification'
-                    ? 'Send Verification Link'
-                    : 'Send Password Reset'}
-                </span>
-              </button>
-            </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleExecuteSupportAction(false)}
+                  disabled={actionLoading !== null}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '9px 16px',
+                    backgroundColor: supportActionTarget.type === 'resend_verification' ? 'var(--card-subtle)' : '#8B5CF6',
+                    color: supportActionTarget.type === 'resend_verification' ? 'var(--main-text)' : '#FFFFFF',
+                    border: supportActionTarget.type === 'resend_verification' ? '1px solid var(--border)' : 'none',
+                    borderRadius: 'var(--radius-btn, 8px)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: actionLoading !== null ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {actionLoading !== null ? (
+                    <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  ) : supportActionTarget.type === 'resend_verification' ? (
+                    <Mail size={15} />
+                  ) : (
+                    <KeyRound size={15} />
+                  )}
+                  <span>
+                    {supportActionTarget.type === 'resend_verification'
+                      ? 'Send via Gmail'
+                      : 'Send Password Reset Link'}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
