@@ -96,6 +96,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         });
 
         localStorage.setItem('token', res.data.access_token);
+        localStorage.removeItem('fintrack_tour_completed');
         setSuccessMsg('Login successful! Redirecting...');
         resetForm();
 

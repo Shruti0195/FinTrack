@@ -160,6 +160,10 @@ export const BudgetAlertSettingsModal: React.FC<BudgetAlertSettingsModalProps> =
   };
 
   const handleSaveClick = async () => {
+    if (document.body.classList.contains('tour-active-sample')) {
+      setCustomError('Saving alert settings is disabled during the guided tour.');
+      return;
+    }
     if (applyToAll && !showConfirmApplyAll) {
       setShowConfirmApplyAll(true);
       return;
@@ -169,6 +173,10 @@ export const BudgetAlertSettingsModal: React.FC<BudgetAlertSettingsModalProps> =
 
   const executeSave = async () => {
     if (!budget) return;
+    if (document.body.classList.contains('tour-active-sample')) {
+      setCustomError('Saving alert settings is disabled during the guided tour.');
+      return;
+    }
     try {
       setSaving(true);
       setCustomError('');
@@ -295,6 +303,26 @@ export const BudgetAlertSettingsModal: React.FC<BudgetAlertSettingsModalProps> =
             </button>
           </div>
         </div>
+
+        {/* Guided tour preview banner */}
+        {document.body.classList.contains('tour-active-sample') && (
+          <div
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--light-accent)',
+              border: '1px solid var(--accent)',
+              color: 'var(--accent-hover)',
+              fontSize: '12px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span>Preview mode: alert settings can be explored but cannot be saved during the tour.</span>
+          </div>
+        )}
 
         {/* Success / Error notification */}
         {successMsg && (

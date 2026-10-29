@@ -10,13 +10,15 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { PeriodCapsule } from './PeriodCapsule';
-import { GettingStartedChecklist } from './GettingStartedChecklist';
+
 import { NeedsAttentionStrip } from './NeedsAttentionStrip';
 import { DashboardBudgetsWidget } from './DashboardBudgetsWidget';
 import { DashboardGoalsWidget } from './DashboardGoalsWidget';
 import { QuickAddIncomeModal } from './QuickAddIncomeModal';
 import { QuickAddExpenseModal } from './QuickAddExpenseModal';
 import { QuickAddMoneyModal } from './QuickAddMoneyModal';
+import { useTour } from '../tour';
+import { dashboardTourSteps } from '../tour/tourRegistry';
 import type { Budget } from '../api/budgets';
 import type { Goal } from '../api/goals';
 
@@ -107,6 +109,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Responsive chart container width tracking
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState<number>(500);
+
+  const { registerPageSteps } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('dashboard', dashboardTourSteps);
+  }, [registerPageSteps]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -299,7 +307,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         gap: '16px',
         marginBottom: '20px'
       }}>
-        <div style={{ minWidth: '240px' }}>
+        <div data-tour="dashboard-welcome" style={{ minWidth: '240px' }}>
           <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px', letterSpacing: '-0.02em' }}>
             Good Morning, {userName.split(' ')[0]}! 👋
           </h1>
@@ -308,67 +316,68 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div data-tour="dashboard-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <PeriodCapsule
             periodType={periodType}
             periodLabel={data?.period_label || 'April 2026'}
           />
 
           {/* Quick Actions Buttons */}
-          <button
-            onClick={() => setShowAddExpenseModal(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              padding: '8px 14px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              height: '38px',
-              backgroundColor: 'var(--card)',
-              color: 'var(--primary)',
-              border: '1px solid var(--border)',
-              transition: 'background-color 0.15s ease, border-color 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--card-subtle)')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--card)')}
-          >
-            <Plus size={15} />
-            <span>Add expense</span>
-          </button>
+          <div data-tour="dashboard-quick-actions" style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={() => setShowAddExpenseModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                padding: '8px 14px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                height: '38px',
+                backgroundColor: 'var(--card)',
+                color: 'var(--primary)',
+                border: '1px solid var(--border)',
+                transition: 'background-color 0.15s ease, border-color 0.15s ease'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--card-subtle)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--card)')}
+            >
+              <Plus size={15} />
+              <span>Add expense</span>
+            </button>
 
-          <button
-            onClick={() => setShowAddIncomeModal(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              padding: '8px 14px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              height: '38px',
-              backgroundColor: 'var(--accent)',
-              color: '#FFFFFF',
-              border: 'none',
-              transition: 'opacity 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-          >
-            <Plus size={15} />
-            <span>Add income</span>
-          </button>
+            <button
+              onClick={() => setShowAddIncomeModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                padding: '8px 14px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                height: '38px',
+                backgroundColor: 'var(--accent)',
+                color: '#FFFFFF',
+                border: 'none',
+                transition: 'opacity 0.15s ease'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+            >
+              <Plus size={15} />
+              <span>Add income</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Getting Started Checklist (For New Users, Shared with Help page) */}
-      <GettingStartedChecklist onNavigateTab={onNavigateTab} />
+
 
       {/* Needs Attention Strip (Live view of over-limit budgets, urgent deadlines, inactivity) */}
       <NeedsAttentionStrip
@@ -380,7 +389,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       />
 
       {/* 2. ROW 2: TOP KPI SUMMARY METRICS (4 CARDS) */}
-      <div style={{
+      <div data-tour="dashboard-kpis" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '18px',
@@ -519,6 +528,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Financial Health Score Widget */}
         <div
+          data-tour="dashboard-health-card"
           onClick={() => onNavigateTab('analytics')}
           className="card-box"
           style={{
@@ -587,7 +597,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         marginBottom: '24px'
       }}>
         {/* Income vs Expenses Month-Wise Chart */}
-        <div className="card-box" style={{
+        <div data-tour="dashboard-chart" className="card-box" style={{
           padding: '22px',
           display: 'flex',
           flexDirection: 'column',
@@ -808,14 +818,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Budgets Widget (Row 3 Right) */}
-        <DashboardBudgetsWidget
-          periodType={periodType}
-          selectedYear={selectedYear}
-          selectedMonth={selectedMonth}
-          onNavigateTab={onNavigateTab}
-          onBudgetsLoaded={setLiveBudgets}
-          refreshTrigger={refreshTrigger}
-        />
+        <div data-tour="dashboard-budgets-widget" style={{ height: '100%' }}>
+          <DashboardBudgetsWidget
+            periodType={periodType}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            onNavigateTab={onNavigateTab}
+            onBudgetsLoaded={setLiveBudgets}
+            refreshTrigger={refreshTrigger}
+          />
+        </div>
       </div>
 
       {/* 4. ROW 4: GOALS WIDGET (LEFT) | RECENT TRANSACTIONS (RIGHT) */}
@@ -826,17 +838,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         marginBottom: '24px'
       }}>
         {/* Goals Widget (Row 4 Left) */}
-        <DashboardGoalsWidget
-          onNavigateTab={onNavigateTab}
-          onOpenAddMoney={(goal) => {
-            setSelectedGoalForMoney(goal);
-          }}
-          onGoalsLoaded={setLiveGoals}
-          refreshTrigger={refreshTrigger}
-        />
+        <div data-tour="dashboard-goals-widget" style={{ height: '100%' }}>
+          <DashboardGoalsWidget
+            onNavigateTab={onNavigateTab}
+            onOpenAddMoney={(goal) => {
+              setSelectedGoalForMoney(goal);
+            }}
+            onGoalsLoaded={setLiveGoals}
+            refreshTrigger={refreshTrigger}
+          />
+        </div>
 
         {/* Recent Transactions List (Row 4 Right) */}
-        <div className="card-box" style={{
+        <div data-tour="dashboard-recent-transactions" className="card-box" style={{
           padding: '22px',
           display: 'flex',
           flexDirection: 'column',

@@ -40,6 +40,8 @@ import { CustomSelect } from './CustomSelect';
 import { BudgetAlertSettingsModal, formatBudgetAlertPreview, formatBudgetCardBellSummary } from './BudgetAlertSettingsModal';
 import { PauseAlertsModal } from './PauseAlertsModal';
 import { PeriodCapsule } from './PeriodCapsule';
+import { useTour } from '../tour';
+import { budgetTourSteps } from '../tour/tourRegistry';
 import type { PeriodType } from './PeriodFilterDropdown';
 import type { 
   Budget, 
@@ -197,6 +199,12 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
 
   // Period View state
   const [activePeriod, setActivePeriod] = useState<BudgetPeriodType>('monthly');
+
+  const { registerPageSteps, isTourActive } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('budgets', budgetTourSteps);
+  }, [registerPageSteps]);
   const [selectedMonth, setSelectedMonth] = useState<number>(propMonth || currentMonth);
   const [selectedQuarter, setSelectedQuarter] = useState<number>(propQuarter || currentQuarter);
   const [selectedHalf, setSelectedHalf] = useState<number>(propHalf || currentHalf);
@@ -360,6 +368,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
 
   // Alert pause handlers
   const handleResumeAlerts = async () => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setErrorMsg('Budget alert changes are disabled during the guided tour.');
+      return;
+    }
     try {
       const res = await resumeBudgetAlerts();
       setIsAlertsPaused(res.is_paused);
@@ -372,6 +384,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   };
 
   const handleConfirmPause = async (duration: '1_day' | '1_week' | '1_month' | 'indefinite') => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setErrorMsg('Budget alert changes are disabled during the guided tour.');
+      return;
+    }
     try {
       const res = await pauseBudgetAlerts(duration);
       setIsAlertsPaused(res.is_paused);
@@ -385,6 +401,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
 
   // Open create modal
   const handleOpenCreateModal = () => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setErrorMsg('Creating budgets is disabled during the guided tour.');
+      return;
+    }
     setFormError(null);
     setFormLimitAmount('');
     setFormMonth(selectedMonth);
@@ -415,6 +435,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setFormError('Actions that save are disabled during the guided tour.');
+      return;
+    }
     const limit = parseFloat(formLimitAmount);
     if (isNaN(limit) || limit <= 0) {
       setFormError('Please enter a valid limit amount greater than 0.');
@@ -493,6 +517,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
 
   // Open Edit Modal
   const handleOpenEditModal = (b: Budget) => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setErrorMsg('Editing budgets is disabled during the guided tour.');
+      return;
+    }
     setEditingBudget(b);
     setFormLimitAmount(b.limit_amount.toString());
     setCustomThresholds(b.custom_alert_thresholds && b.custom_alert_thresholds.length > 0 ? b.custom_alert_thresholds : [80, 100]);
@@ -507,6 +535,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   // Submit Edit Budget
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setFormError('Actions that save are disabled during the guided tour.');
+      return;
+    }
     if (!editingBudget) return;
     setFormError(null);
     const limit = parseFloat(formLimitAmount);
@@ -537,6 +569,11 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   // Delete budget
   const handleDeleteConfirm = async () => {
     if (!deletingBudgetId) return;
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setErrorMsg('Deleting budgets is disabled during the guided tour.');
+      setDeletingBudgetId(null);
+      return;
+    }
     try {
       await deleteBudget(deletingBudgetId);
       setDeletingBudgetId(null);
@@ -572,7 +609,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
         justifyContent: 'space-between',
         gap: '16px'
       }}>
-        <div>
+        <div data-tour="budgets-header-title">
           <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px' }}>
             Budgets & Expense Limits
           </h1>
@@ -589,6 +626,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           />
           {/* Budget alerts pause switch */}
           <div
+            data-tour="budget-pause-switch"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -659,6 +697,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
 
           {/* Set New Budget Button */}
           <button
+            data-tour="budgets-add-btn"
             onClick={handleOpenCreateModal}
             className="btn btn-primary"
             style={{
@@ -820,7 +859,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
               </div>
             </div>
 
-            <div>
+            <div data-tour="budget-status-legend">
               <div style={{ fontSize: '12px', color: 'var(--secondary-text)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
                 Category Health Status
               </div>
@@ -952,7 +991,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
             gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
             gap: '18px'
           }}>
-            {budgets.map((b) => {
+            {budgets.map((b, bIdx) => {
               const isOver = b.status === 'exceeded';
               const isWarning = b.status === 'warning';
 
@@ -987,7 +1026,8 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
               return (
                 <div 
                   key={b.id || b.category_id} 
-                  className="card-box" 
+                  className="card-box"
+                  {...(bIdx === 0 ? { 'data-tour': 'budget-card' } : {})} 
                   style={{ 
                     padding: '20px', 
                     display: 'flex', 
@@ -1114,6 +1154,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                     {/* Card-level Alert Summary Bell Button */}
                     <button
                       type="button"
+                      {...(bIdx === 0 ? { 'data-tour': 'budget-alert-bell' } : {})}
                       onClick={() => {
                         setSelectedBudgetForAlerts(b);
                         setIsAlertSettingsModalOpen(true);

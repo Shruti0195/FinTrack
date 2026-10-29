@@ -4,11 +4,13 @@ import { Info } from 'lucide-react';
 export interface GoalsInfoTooltipProps {
   size?: number;
   align?: 'left' | 'right';
+  dataTour?: string;
 }
 
 export const GoalsInfoTooltip: React.FC<GoalsInfoTooltipProps> = ({
   size = 15,
-  align = 'left'
+  align = 'left',
+  dataTour
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -48,6 +50,7 @@ export const GoalsInfoTooltip: React.FC<GoalsInfoTooltipProps> = ({
       <button
         ref={triggerRef}
         type="button"
+        data-tour={dataTour}
         onClick={() => setIsOpen((prev) => !prev)}
         onMouseEnter={() => setIsOpen(true)}
         onMouseLeave={() => setIsOpen(false)}

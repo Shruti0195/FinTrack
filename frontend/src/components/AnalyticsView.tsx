@@ -20,6 +20,9 @@ import {
 } from '../api/analytics';
 import { PeriodCapsule } from './PeriodCapsule';
 import { GoalsInfoTooltip } from './GoalsInfoTooltip';
+import { useTour } from '../tour';
+import { analyticsTourSteps } from '../tour/tourRegistry';
+import { SampleDataBadge } from '../tour/sampleData';
 
 interface AnalyticsViewProps {
   periodType: 'monthly' | 'quarterly' | 'half_year' | 'yearly';
@@ -111,6 +114,7 @@ const FinancialHealthInfoPopover: React.FC<FinancialHealthInfoPopoverProps> = ()
           outline: 'none',
           transition: 'all 0.15s ease'
         }}
+        data-tour="analytics-health-info-icon"
         className="info-icon-btn"
       >
         <Info size={15} />
@@ -213,6 +217,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  const { registerPageSteps, isTourActive } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('analytics', analyticsTourSteps);
+  }, [registerPageSteps]);
+
   const loadData = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -242,9 +252,23 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const handleSampleDataChange = () => {
+      loadData();
+    };
+    window.addEventListener('fintrack:sample-data-changed', handleSampleDataChange);
+    return () => {
+      window.removeEventListener('fintrack:sample-data-changed', handleSampleDataChange);
+    };
+  }, [loadData]);
+
   // PDF Report Download Handler
   const handleDownloadReport = async () => {
     if (isDownloading) return;
+    if (isTourActive || (typeof document !== 'undefined' && document.body.classList.contains('tour-active-sample'))) {
+      setDownloadError('PDF report download is disabled during the guided tour.');
+      return;
+    }
     setIsDownloading(true);
     setDownloadError(null);
 
@@ -445,18 +469,21 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* Page Title & Subtitle */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h1
-              style={{
-                fontSize: '24px',
-                fontWeight: 700,
-                color: 'var(--primary)',
-                letterSpacing: '-0.02em',
-                margin: 0
-              }}
-            >
-              Financial Analytics
-            </h1>
+          <div data-tour="analytics-header-title">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h1
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 700,
+                  color: 'var(--primary)',
+                  letterSpacing: '-0.02em',
+                  margin: 0
+                }}
+              >
+                Financial Analytics
+              </h1>
+              <SampleDataBadge section="analytics" />
+            </div>
             <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', marginTop: '4px', margin: 0 }}>
               Category allocations, period performance, and Financial Health Score for {data.period_label}.
             </p>
@@ -475,6 +502,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
                 return (
                   <button
+                    data-tour="analytics-download-report-btn"
                     type="button"
                     onClick={handleDownloadReport}
                     disabled={isDownloading || !hasEntriesInPeriod}
@@ -577,7 +605,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* ========================================================= */}
       {/* 1. FINANCIAL HEALTH SCORE (Focused, Concise & Non-Cluttered) */}
       {/* ========================================================= */}
-      <section className="card-box" style={{ padding: '24px' }}>
+      <section data-tour="analytics-health-score" className="card-box" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {/* Top Row: Circular Score Meter + Status + Title + Single (i) Info Symbol */}
@@ -653,6 +681,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   >
                     {health_score.status_label}
                   </span>
+                  <SampleDataBadge section="analytics-health" />
 
                   {/* ONLY ONE Info Symbol with Concise Breakdown */}
                   <FinancialHealthInfoPopover healthScore={health_score} />
@@ -744,21 +773,240 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <span>{health_score.improvement_line}</span>
           </div>
 
+          {/* Four Factors & Points Breakdown */}
+          <div
+            data-tour="analytics-health-factors"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '10px'
+            }}
+          >
+            {health_score.factors && health_score.factors.length > 0 ? (
+              health_score.factors.map((factor, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--card-subtle)',
+                    border: '1px solid var(--border)'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>
+                      {factor.name}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>
+                      Max {factor.max_points} pts
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)' }}>
+                    {factor.earned_points} / {factor.max_points} pts
+                  </div>
+                </div>
+              ))
+            ) : (
+              [
+                { name: 'Savings Rate', pts: '35 pts max' },
+                { name: 'Budget Adherence', pts: '30 pts max' },
+                { name: 'Expense Stability', pts: '20 pts max' },
+                { name: 'Essential vs Lifestyle', pts: '15 pts max' }
+              ].map((factor, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--card-subtle)',
+                    border: '1px solid var(--border)'
+                  }}
+                >
+                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>{factor.name}</span>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>{factor.pts}</span>
+                </div>
+              ))
+            )}
+          </div>
+
         </div>
       </section>
 
       {/* ========================================================= */}
-      {/* 2. WHERE THE MONEY GOES */}
+      {/* 2. SPENDING & SAVING TRENDS */}
       {/* ========================================================= */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '20px' }}>
+      <section data-tour="analytics-trends-chart" className="card-box" style={{ padding: '22px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
+                Spending & Saving Trends
+              </h3>
+              <SampleDataBadge section="analytics-trends" />
+            </div>
+            <p style={{ fontSize: '12.5px', color: 'var(--secondary-text)', marginTop: '2px', margin: 0 }}>
+              Monthly overview of your income, expenses, and net savings over time.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#10B981' }} />
+              <span style={{ color: 'var(--secondary-text)', fontWeight: 500 }}>Income</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#EF4444' }} />
+              <span style={{ color: 'var(--secondary-text)', fontWeight: 500 }}>Expenses</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#3B82F6' }} />
+              <span style={{ color: 'var(--secondary-text)', fontWeight: 500 }}>Savings</span>
+            </div>
+          </div>
+        </div>
+
+        {trends.monthly_trends && trends.monthly_trends.length > 0 ? (
+          <div>
+            {(() => {
+              const maxVal = Math.max(...trends.monthly_trends.map(t => Math.max(t.income, t.expenses, t.savings, 1000)));
+              const chartHeight = 180;
+              const yBase = 140;
+              const maxBarHeight = 100;
+              const totalItems = trends.monthly_trends.length;
+
+              return (
+                <div style={{ overflowX: 'auto', paddingBottom: '4px' }}>
+                  <svg
+                    viewBox={`0 0 ${Math.max(600, totalItems * 95)} ${chartHeight}`}
+                    style={{ width: '100%', minWidth: `${Math.max(500, totalItems * 85)}px`, height: '180px', display: 'block' }}
+                  >
+                    {/* Horizontal Grid lines */}
+                    <line x1="45" y1="30" x2="100%" y2="30" stroke="var(--border)" strokeDasharray="3,3" opacity="0.6" />
+                    <line x1="45" y1="85" x2="100%" y2="85" stroke="var(--border)" strokeDasharray="3,3" opacity="0.6" />
+                    <line x1="45" y1={yBase} x2="100%" y2={yBase} stroke="var(--border)" strokeWidth="1.2" />
+
+                    {/* Y-Axis Value Labels */}
+                    <text x="40" y="34" textAnchor="end" fontSize="10.5" fill="var(--secondary-text)">
+                      {formatINR(maxVal, true)}
+                    </text>
+                    <text x="40" y="89" textAnchor="end" fontSize="10.5" fill="var(--secondary-text)">
+                      {formatINR(maxVal / 2, true)}
+                    </text>
+                    <text x="40" y={yBase + 4} textAnchor="end" fontSize="10.5" fill="var(--secondary-text)">
+                      ₹0
+                    </text>
+
+                    {/* Bars per Month */}
+                    {trends.monthly_trends.map((t, idx) => {
+                      const startX = 60 + idx * 85;
+                      const barW = 16;
+                      const gap = 4;
+
+                      const incH = Math.max(4, (t.income / maxVal) * maxBarHeight);
+                      const expH = Math.max(4, (t.expenses / maxVal) * maxBarHeight);
+                      const savH = Math.max(4, (Math.max(0, t.savings) / maxVal) * maxBarHeight);
+
+                      const incY = yBase - incH;
+                      const expY = yBase - expH;
+                      const savY = yBase - savH;
+
+                      return (
+                        <g key={idx}>
+                          {/* Income Bar */}
+                          <rect
+                            x={startX}
+                            y={incY}
+                            width={barW}
+                            height={incH}
+                            rx="3"
+                            fill="#10B981"
+                          >
+                            <title>{`${t.month_name}: Income ${formatINR(t.income)}`}</title>
+                          </rect>
+
+                          {/* Expense Bar */}
+                          <rect
+                            x={startX + barW + gap}
+                            y={expY}
+                            width={barW}
+                            height={expH}
+                            rx="3"
+                            fill="#EF4444"
+                          >
+                            <title>{`${t.month_name}: Expenses ${formatINR(t.expenses)}`}</title>
+                          </rect>
+
+                          {/* Savings Bar */}
+                          <rect
+                            x={startX + (barW + gap) * 2}
+                            y={savY}
+                            width={barW}
+                            height={savH}
+                            rx="3"
+                            fill="#3B82F6"
+                          >
+                            <title>{`${t.month_name}: Savings ${formatINR(t.savings)} (${t.savings_rate}%)`}</title>
+                          </rect>
+
+                          {/* Savings Rate text above group */}
+                          <text
+                            x={startX + barW + gap + barW / 2}
+                            y={Math.min(incY, expY, savY) - 6}
+                            textAnchor="middle"
+                            fontSize="10"
+                            fontWeight="600"
+                            fill="var(--accent)"
+                          >
+                            {t.savings_rate}%
+                          </text>
+
+                          {/* Month Label */}
+                          <text
+                            x={startX + barW + gap + barW / 2}
+                            y={yBase + 18}
+                            textAnchor="middle"
+                            fontSize="11"
+                            fontWeight="600"
+                            fill="var(--secondary-text)"
+                          >
+                            {t.month_name}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              );
+            })()}
+          </div>
+        ) : (
+          <div style={{ padding: '30px', textAlign: 'center', color: 'var(--secondary-text)', fontSize: '13px' }}>
+            No monthly trend data recorded yet for this period.
+          </div>
+        )}
+      </section>
+
+      {/* ========================================================= */}
+      {/* 3. WHERE THE MONEY GOES */}
+      {/* ========================================================= */}
+      <section data-tour="analytics-where-money-goes" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '20px' }}>
         
         {/* Category Expense Mix */}
         <div className="card-box" style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
-                Expense Mix by Category
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
+                  Expense Mix by Category
+                </h3>
+                <SampleDataBadge section="analytics-mix" />
+              </div>
               <p style={{ fontSize: '12.5px', color: 'var(--secondary-text)', marginTop: '2px', margin: 0 }}>
                 Breakdown of where your money was spent across categories in this period.
               </p>
@@ -1017,13 +1265,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       </section>
 
       {/* ========================================================= */}
-      {/* 3. THIS PERIOD VERSUS PREVIOUS PERIOD */}
+      {/* 4. THIS PERIOD VERSUS PREVIOUS PERIOD */}
       {/* ========================================================= */}
-      <section className="card-box" style={{ padding: '22px' }}>
+      <section data-tour="analytics-comparison" className="card-box" style={{ padding: '22px' }}>
         <div style={{ marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
-            Period-over-Period Performance
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
+              Period-over-Period Performance
+            </h3>
+            <SampleDataBadge section="analytics-comparison" />
+          </div>
           <p style={{ fontSize: '12.5px', color: 'var(--secondary-text)', marginTop: '2px', margin: 0 }}>
             Comparing current results directly with the immediate prior period. Green marks positive progress; red highlights areas of caution.
           </p>

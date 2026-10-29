@@ -32,6 +32,7 @@ class UserOut(UserBase):
     goal_inactivity_nudge_days: Optional[int] = 30
     goal_alert_in_app: bool = True
     goal_alert_email: bool = True
+    tour_completed_version: int = 0
     created_at: datetime
 
     class Config:

@@ -26,6 +26,8 @@ import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
 import { PeriodCapsule } from '../components/PeriodCapsule';
 import type { PeriodType } from '../components/PeriodFilterDropdown';
+import { useTour } from '../tour';
+import { incomeTourSteps } from '../tour/tourRegistry';
 
 export interface IncomeCategory {
   id: string;
@@ -123,6 +125,12 @@ export const IncomePage: React.FC<IncomePageProps> = ({
 
   const months = MONTHS_LIST;
   const activePeriodLabel = propPeriodLabel || (periodType === 'monthly' ? `${months[selectedMonth]?.label || ''} ${selectedYear}` : `Year ${selectedYear}`);
+
+  const { registerPageSteps, isTourActive } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('income', incomeTourSteps);
+  }, [registerPageSteps]);
 
   // Data state
   const [incomes, setIncomes] = useState<IncomeEntry[]>([]);
@@ -437,6 +445,10 @@ export const IncomePage: React.FC<IncomePageProps> = ({
 
   // Open Add Modal
   const handleOpenAdd = () => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showFeedback('Adding income is disabled during the guided tour.', 'error');
+      return;
+    }
     setEditingEntry(null);
     setFormAmount('');
     setFormCategoryId(categories[0]?.id || '');
@@ -451,6 +463,10 @@ export const IncomePage: React.FC<IncomePageProps> = ({
 
   // Open Edit Modal
   const handleOpenEdit = (entry: IncomeEntry) => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showFeedback('Editing income is disabled during the guided tour.', 'error');
+      return;
+    }
     setEditingEntry(entry);
     setFormAmount(String(entry.amount));
     setFormCategoryId(entry.category_id);
@@ -467,6 +483,10 @@ export const IncomePage: React.FC<IncomePageProps> = ({
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setFormError('Actions that save are disabled during the guided tour.');
+      return;
+    }
 
     const parsedAmount = parseFloat(formAmount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -770,7 +790,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
         gap: '16px',
         marginBottom: '24px'
       }}>
-        <div>
+        <div data-tour="income-header">
           <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px', letterSpacing: '-0.02em' }}>
             Income
           </h1>
@@ -784,7 +804,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
           <PeriodCapsule periodType={periodType} periodLabel={activePeriodLabel} />
 
           {/* Export Dropdown Menu (CSV or PDF) */}
-          <div style={{ position: 'relative' }} ref={exportMenuRef}>
+          <div style={{ position: 'relative' }} ref={exportMenuRef} data-tour="income-export-btn">
             <button
               onClick={() => setShowExportMenu((prev) => !prev)}
               style={{
@@ -885,6 +905,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
 
           {/* Add Income Button */}
           <button
+            data-tour="income-add-btn"
             onClick={handleOpenAdd}
             className="btn-primary"
             style={{
@@ -906,7 +927,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
       </div>
 
       {/* 2. STATS & KPI METRIC CARDS (4 CARDS) */}
-      <div style={{
+      <div data-tour="income-summary-cards" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: '18px',
@@ -1048,7 +1069,7 @@ export const IncomePage: React.FC<IncomePageProps> = ({
       </div>
 
       {/* 3. TOOLBAR & FILTER CONTROLS */}
-      <div className="card-box" style={{ padding: '16px 20px', marginBottom: '20px' }}>
+      <div className="card-box" data-tour="income-toolbar" style={{ padding: '16px 20px', marginBottom: '20px' }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -1274,7 +1295,8 @@ export const IncomePage: React.FC<IncomePageProps> = ({
                         No records match the selected month, category, or search filters.
                       </p>
                       <button
-                        onClick={handleOpenAdd}
+                        data-tour="income-empty-add-btn"
+            onClick={handleOpenAdd}
                         className="btn-primary"
                         style={{ marginTop: '8px', padding: '8px 16px', fontSize: '13px' }}
                       >

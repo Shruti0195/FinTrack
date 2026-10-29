@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { ChangePasswordModal } from './ChangePasswordModal';
+import { useTour } from '../tour';
+import { settingsTourSteps } from '../tour/tourRegistry';
 
 export interface UserSettings {
   name: string;
@@ -28,6 +30,12 @@ export interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfileUpdate }) => {
+  const { registerPageSteps, isTourActive } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('settings', settingsTourSteps);
+  }, [registerPageSteps]);
+
   const [profile, setProfile] = useState<UserSettings>({
     name: initialName || '',
     email: '',
@@ -62,6 +70,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isTourActive || (typeof document !== 'undefined' && document.body.classList.contains('tour-active-sample'))) {
+      setFeedback({ msg: 'Saving settings is disabled during the guided tour.', type: 'error' });
+      return;
+    }
     setSaving(true);
     setFeedback(null);
     try {
@@ -133,7 +145,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
       <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
         {/* 1. PROFILE DETAILS SECTION */}
-        <div className="card-box" style={{ padding: '24px' }}>
+        <div data-tour="settings-profile" className="card-box" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
             <div style={{
               width: '36px',
@@ -215,6 +227,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
             </div>
 
             <button
+              data-tour="settings-change-password"
               type="button"
               onClick={() => setIsPasswordModalOpen(true)}
               className="btn-outline"
@@ -272,7 +285,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialName, onProfi
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             {/* Monthly Financial Report Switch */}
-            <div style={{
+            <div data-tour="settings-monthly-reports" style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',

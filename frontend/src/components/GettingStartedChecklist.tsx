@@ -102,6 +102,7 @@ export const GettingStartedChecklist: React.FC<GettingStartedChecklistProps> = (
 
   return (
     <section
+      data-tour="getting-started-checklist"
       className="card-box"
       style={{
         backgroundColor: 'var(--card)',

@@ -1,10 +1,94 @@
 import smtplib
+import ssl
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+def _send_smtp_email(
+    to_email: str,
+    subject: str,
+    plain_text: str,
+    html_content: str,
+    reply_to: str = None,
+    description: str = "email"
+) -> bool:
+    """
+    Robust SMTP email sender with:
+    - Primary connection (SSL 465 or STARTTLS 587 based on configuration)
+    - Automatic fallback (if 465 fails, tries 587; if 587 fails, tries 465)
+    - Modern SSLContext
+    - 25-second socket timeout to prevent 'Connection unexpectedly closed' on slow networks
+    - Dev-mode console fallback if credentials are unset
+    """
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        print("\n" + "=" * 65)
+        print(f"[DEV MODE: {description.upper()} DISPATCH]")
+        print(f"Recipient: {to_email}")
+        print(f"Subject: {subject}")
+        print("Details:\n" + plain_text)
+        print("NOTE: Set SMTP_USER & SMTP_PASSWORD in backend/.env for real delivery.")
+        print("=" * 65 + "\n")
+        return True
+
+    from_name = (settings.EMAILS_FROM_NAME or "FinTrack").strip('"\'')
+    from_email = settings.EMAILS_FROM_EMAIL or settings.SMTP_USER
+    smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{from_name} <{from_email}>"
+    msg["To"] = to_email
+    if reply_to:
+        msg["Reply-To"] = reply_to
+
+    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+    msg_str = msg.as_string()
+
+    # Determine connection sequence: try configured port first, then alternate fallback port
+    configured_port = int(settings.SMTP_PORT or 465)
+    if configured_port == 465:
+        ports_to_try = [465, 587]
+    elif configured_port == 587:
+        ports_to_try = [587, 465]
+    else:
+        ports_to_try = [configured_port, 465, 587]
+
+    ssl_context = ssl.create_default_context()
+    last_error = None
+
+    for port in ports_to_try:
+        try:
+            if port == 465:
+                # Direct SSL/TLS socket (recommended for Gmail - fast and reliable)
+                with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=ssl_context, timeout=25) as server:
+                    server.login(settings.SMTP_USER, smtp_password)
+                    server.sendmail(settings.SMTP_USER, [to_email], msg_str)
+            else:
+                # STARTTLS socket
+                with smtplib.SMTP(settings.SMTP_HOST, port, timeout=25) as server:
+                    server.ehlo()
+                    server.starttls(context=ssl_context)
+                    server.ehlo()
+                    server.login(settings.SMTP_USER, smtp_password)
+                    server.sendmail(settings.SMTP_USER, [to_email], msg_str)
+
+            logger.info(f"{description.capitalize()} successfully sent to {to_email} via port {port}")
+            print(f"[SUCCESS] {description.capitalize()} sent to {to_email} via Gmail SMTP (port {port}).")
+            return True
+
+        except Exception as e:
+            last_error = e
+            logger.warning(f"SMTP attempt on port {port} failed for {to_email}: {str(e)}")
+            time.sleep(0.5)
+
+    logger.error(f"Failed to send {description} to {to_email} after trying ports {ports_to_try}: {str(last_error)}")
+    print(f"[ERROR] Failed to send email via Gmail: {str(last_error)}")
+    return False
 
 def generate_verification_email_html(name: str, verification_url: str) -> str:
     return f"""<!DOCTYPE html>
@@ -190,40 +274,13 @@ def send_verification_email(email_to: str, name: str, token: str) -> bool:
         f"This link expires in {settings.EMAIL_VERIFICATION_EXPIRE_HOURS} hours.\n"
         f"If you did not sign up for FinTrack, please ignore this email."
     )
-
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print("\n" + "=" * 65)
-        print("[DEV MODE: EMAIL VERIFICATION DISPATCH]")
-        print(f"Recipient: {name} <{email_to}>")
-        print(f"Activation Link: {verification_url}")
-        print("NOTE: Set SMTP_USER & SMTP_PASSWORD in backend/.env for real Gmail delivery.")
-        print("=" * 65 + "\n")
-        return True
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Verify your FinTrack Account"
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
-        msg["To"] = email_to
-
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, smtp_password)
-            server.sendmail(settings.SMTP_USER, [email_to], msg.as_string())
-
-        logger.info(f"Verification email successfully sent to {email_to}")
-        print(f"[SUCCESS] Verification email sent to {email_to} via Gmail SMTP.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send email to {email_to}: {str(e)}")
-        print(f"[ERROR] Failed to send email via Gmail: {str(e)}")
-        return False
+    return _send_smtp_email(
+        to_email=email_to,
+        subject="Verify your FinTrack Account",
+        plain_text=plain_text,
+        html_content=html_content,
+        description="verification email"
+    )
 
 def send_password_reset_email(email_to: str, name: str, token: str) -> bool:
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
@@ -235,40 +292,13 @@ def send_password_reset_email(email_to: str, name: str, token: str) -> bool:
         f"This link expires in 1 hour.\n"
         f"If you did not request this, please ignore this email."
     )
-
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print("\n" + "=" * 65)
-        print("[DEV MODE: PASSWORD RESET DISPATCH]")
-        print(f"Recipient: {name} <{email_to}>")
-        print(f"Password Reset Link: {reset_url}")
-        print("NOTE: Set SMTP_USER & SMTP_PASSWORD in backend/.env for real Gmail delivery.")
-        print("=" * 65 + "\n")
-        return True
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Reset your FinTrack Password"
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
-        msg["To"] = email_to
-
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, smtp_password)
-            server.sendmail(settings.SMTP_USER, [email_to], msg.as_string())
-
-        logger.info(f"Password reset email successfully sent to {email_to}")
-        print(f"[SUCCESS] Password reset email sent to {email_to} via Gmail SMTP.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send password reset email to {email_to}: {str(e)}")
-        print(f"[ERROR] Failed to send password reset email via Gmail: {str(e)}")
-        return False
+    return _send_smtp_email(
+        to_email=email_to,
+        subject="Reset your FinTrack Password",
+        plain_text=plain_text,
+        html_content=html_content,
+        description="password reset email"
+    )
 
 def generate_budget_alert_email_html(
     name: str,
@@ -417,40 +447,13 @@ def send_budget_alert_email(
         f"Manage your budgets in FinTrack: {settings.FRONTEND_URL}\n"
     )
 
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print("\n" + "=" * 65)
-        print("[DEV MODE: BUDGET ALERT EMAIL DISPATCH]")
-        print(f"Recipient: {name} <{email_to}>")
-        print(f"Subject: {subject}")
-        print(f"Details: {category_name} - ₹{spent_amount} / ₹{limit_amount} ({pct_used:.0f}%)")
-        print("NOTE: Set SMTP_USER & SMTP_PASSWORD in backend/.env for real Gmail delivery.")
-        print("=" * 65 + "\n")
-        return True
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
-        msg["To"] = email_to
-
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, smtp_password)
-            server.sendmail(settings.SMTP_USER, [email_to], msg.as_string())
-
-        logger.info(f"Budget alert email successfully sent to {email_to}")
-        print(f"[SUCCESS] Budget alert email sent to {email_to} via Gmail SMTP.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send budget alert email to {email_to}: {str(e)}")
-        print(f"[ERROR] Failed to send budget alert email via Gmail: {str(e)}")
-        return False
+    return _send_smtp_email(
+        to_email=email_to,
+        subject=subject,
+        plain_text=plain_text,
+        html_content=html_content,
+        description="budget alert email"
+    )
 
 
 def generate_goal_milestone_email_html(
@@ -597,38 +600,13 @@ def send_goal_milestone_email(
         f"Manage your goals in FinTrack: {settings.FRONTEND_URL}\n"
     )
 
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print("\n" + "=" * 65)
-        print("[DEV MODE: GOAL MILESTONE EMAIL DISPATCH]")
-        print(f"Recipient: {name} <{email_to}>")
-        print(f"Subject: {subject}")
-        print("=" * 65 + "\n")
-        return True
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
-        msg["To"] = email_to
-
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, smtp_password)
-            server.sendmail(settings.SMTP_USER, [email_to], msg.as_string())
-
-        logger.info(f"Goal milestone email successfully sent to {email_to}")
-        print(f"[SUCCESS] Goal milestone email sent to {email_to} via Gmail SMTP.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send goal milestone email to {email_to}: {str(e)}")
-        print(f"[ERROR] Failed to send goal milestone email via Gmail: {str(e)}")
-        return False
+    return _send_smtp_email(
+        to_email=email_to,
+        subject=subject,
+        plain_text=plain_text,
+        html_content=html_content,
+        description="goal milestone email"
+    )
 
 
 def generate_support_report_email_html(
@@ -713,41 +691,14 @@ def send_support_report_email(
         page=page
     )
 
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print("\n" + "=" * 65)
-        print("[DEV MODE: SUPPORT REPORT EMAIL DISPATCH]")
-        print(f"To: {target_email}")
-        print(f"Subject: {subject}")
-        print(f"From: {user_name} <{user_email}>")
-        print(f"Details:\n{plain_text}")
-        print("=" * 65 + "\n")
-        return True
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
-        msg["To"] = target_email
-        msg["Reply-To"] = user_email
-
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, smtp_password)
-            server.sendmail(settings.SMTP_USER, [target_email], msg.as_string())
-
-        logger.info(f"Support report email sent to {target_email}")
-        print(f"[SUCCESS] Support report email sent to {target_email} via Gmail SMTP.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send support report email: {str(e)}")
-        print(f"[ERROR] Failed to send support report email: {str(e)}")
-        return False
+    return _send_smtp_email(
+        to_email=target_email,
+        subject=subject,
+        plain_text=plain_text,
+        html_content=html_content,
+        reply_to=user_email,
+        description="support report email"
+    )
 
 
 def generate_password_changed_email_html(name: str, changed_at_str: str, reset_url: str) -> str:
@@ -825,38 +776,12 @@ def send_password_changed_email(
         reset_url=reset_url
     )
 
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print("\n" + "=" * 65)
-        print("[DEV MODE: PASSWORD CHANGED SECURITY ALERT EMAIL]")
-        print(f"To: {user_email}")
-        print(f"Subject: {subject}")
-        print(f"Details:\n{plain_text}")
-        print("=" * 65 + "\n")
-        return True
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL or settings.SMTP_USER}>"
-        msg["To"] = user_email
-
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
-
-        smtp_password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, smtp_password)
-            server.sendmail(settings.SMTP_USER, [user_email], msg.as_string())
-
-        logger.info(f"Password changed security email sent to {user_email}")
-        print(f"[SUCCESS] Password changed security email sent to {user_email} via Gmail SMTP.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send password changed email to {user_email}: {str(e)}")
-        print(f"[ERROR] Failed to send password changed email: {str(e)}")
-        return False
+    return _send_smtp_email(
+        to_email=user_email,
+        subject=subject,
+        plain_text=plain_text,
+        html_content=html_content,
+        description="password changed security email"
+    )
 
 

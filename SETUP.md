@@ -231,3 +231,15 @@ git push -u origin develop
    * Set the **base branch** to `develop` (NOT `main`).
    * Request review from a teammate before merging.
 
+
+
+---
+
+## 8. Guided Tour & Sample Data Integrity
+
+If you change what an API returns, update the matching file in `tour/sampleData`.
+
+To run the automated validation suite on sample data rules and math:
+```bash
+npm --prefix frontend run test:sample-data
+```

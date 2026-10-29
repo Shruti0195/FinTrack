@@ -61,6 +61,7 @@ function AppContent() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('fintrack_active_tab');
+    localStorage.removeItem('fintrack_tour_completed');
     if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname);
     }

@@ -43,6 +43,7 @@ class User(Base):
     # Help & Onboarding checklist
     viewed_analytics = Column(Boolean, nullable=False, default=False)
     help_checklist_dismissed = Column(Boolean, nullable=False, default=False)
+    tour_completed_version = Column(Integer, nullable=False, default=0)
 
     # Security & multi-device session invalidation
     token_version = Column(Integer, nullable=False, default=1)

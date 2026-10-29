@@ -39,6 +39,8 @@ import { NotFoundPage } from './NotFoundPage';
 import { HelpPage } from './HelpPage';
 import { PrivacyPolicyPage } from './PrivacyPolicyPage';
 import { TermsPage } from './TermsPage';
+import { TourProvider, TourButton } from '../tour';
+import { SampleDataBadge } from '../tour/sampleData';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -48,6 +50,7 @@ interface UserProfile {
   name: string;
   email: string;
   role: string;
+  tour_completed_version?: number;
 }
 
 const VALID_TABS = [
@@ -130,6 +133,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const handleDataRefresh = () => {
+      setDataRefreshKey((k) => k + 1);
+    };
+    window.addEventListener('fintrack:refresh-data', handleDataRefresh);
+    return () => window.removeEventListener('fintrack:refresh-data', handleDataRefresh);
+  }, []);
 
   // Notifications State & Infinite Scroll
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -334,15 +347,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   const userName = user?.name || 'User';
   const userInitials = userName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
 
+  const handleTourCompleted = React.useCallback((ver: number) => {
+    setUser((prev) => (prev ? { ...prev, tour_completed_version: ver } : prev));
+  }, []);
+
   const handleProfileUpdate = (updated: { name: string; email?: string }) => {
     setUser((prev) => (prev ? { ...prev, ...updated } : { name: updated.name, email: updated.email || '', role: 'user' }));
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg)' }}>
-      
-      {/* 1. SIDEBAR (Matching Template Image) */}
-      <aside style={{
+    <TourProvider
+      activeTab={activeTab}
+      onNavigateTab={setActiveTab}
+      onToggleMobileSidebar={setIsMobileSidebarOpen}
+      userRole={user?.role}
+      userTourCompletedVersion={user ? (user.tour_completed_version ?? 0) : null}
+      onTourCompleted={handleTourCompleted}
+
+
+    >
+      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg)' }}>
+        
+        {/* 1. SIDEBAR (Matching Template Image) */}
+        <aside
+          id="fintrack-sidebar"
+          data-tour="sidebar-nav"
+          className={`fintrack-sidebar ${isMobileSidebarOpen ? 'sidebar-open' : ''}`}
+          style={{
         width: '240px',
         flexShrink: 0,
         backgroundColor: 'var(--card)',
@@ -355,7 +386,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         top: 0,
         height: '100vh',
         transition: 'background-color 0.2s ease, border-color 0.2s ease'
-      }}>
+              }}
+>
         <div>
           {/* Brand */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 8px 24px' }}>
@@ -368,7 +400,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               alignItems: 'center',
               justifyContent: 'center',
               color: '#FFFFFF'
-            }}>
+              }}
+      >
               <TrendingUp size={18} strokeWidth={2.5} />
             </div>
             <div>
@@ -396,6 +429,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <LayoutDashboard size={18} />
@@ -418,6 +452,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <BarChart3 size={18} />
@@ -440,6 +475,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <PlusCircle size={18} />
@@ -456,12 +492,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 padding: '10px 12px',
                 borderRadius: 'var(--radius-btn)',
                 border: 'none',
-                backgroundColor: activeTab === 'transactions' ? 'var(--light-accent)' : 'transparent',
-                color: activeTab === 'transactions' ? 'var(--accent)' : 'var(--secondary-text)',
-                fontWeight: activeTab === 'transactions' ? 600 : 500,
+                backgroundColor: (activeTab === 'transactions' || activeTab === 'expenses') ? 'var(--light-accent)' : 'transparent',
+                color: (activeTab === 'transactions' || activeTab === 'expenses') ? 'var(--accent)' : 'var(--secondary-text)',
+                fontWeight: (activeTab === 'transactions' || activeTab === 'expenses') ? 600 : 500,
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <Receipt size={18} />
@@ -484,6 +521,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <PieChart size={18} />
@@ -506,6 +544,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 fontSize: '14px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <Target size={18} />
@@ -518,6 +557,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         <div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
             <button
+              data-tour="sidebar-settings-link"
               onClick={() => setActiveTab('settings')}
               style={{
                 display: 'flex',
@@ -532,12 +572,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 fontSize: '13.5px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <Settings size={17} />
               Settings
             </button>
             <button
+              data-tour="sidebar-help-link"
               onClick={() => setActiveTab('help')}
               style={{
                 display: 'flex',
@@ -553,6 +595,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 fontSize: '13.5px',
                 cursor: 'pointer',
                 textAlign: 'left'
+        
               }}
             >
               <HelpCircle size={17} />
@@ -569,7 +612,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
-          }}>
+              }}
+    >
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--accent)' }}>Better decisions.</div>
               <div style={{ fontSize: '11px', color: 'var(--secondary-text)' }}>Brighter future.</div>
@@ -595,25 +639,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           top: 0,
           zIndex: 40,
           transition: 'background-color 0.2s ease, border-color 0.2s ease'
-        }}>
+              }}
+  >
           {/* Right Header Tools */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div data-tour="header-tools" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             {/* Header Period Filter Dropdown: Monthly, Quarterly, Half Year, Year (defaults to Apr 2026) */}
-            <PeriodFilterDropdown
-              periodType={periodType}
-              selectedYear={selectedYear}
-              selectedMonth={selectedMonth}
-              selectedQuarter={selectedQuarter}
-              selectedHalf={selectedHalf}
-              onPeriodTypeChange={(t) => setPeriodType(t)}
-              onYearChange={(y) => setSelectedYear(y)}
-              onMonthChange={(m) => setSelectedMonth(m)}
-              onQuarterChange={(q) => setSelectedQuarter(q)}
-              onHalfChange={(h) => setSelectedHalf(h)}
-            />
+            <div data-tour="header-date-selector">
+              <PeriodFilterDropdown
+                periodType={periodType}
+                selectedYear={selectedYear}
+                selectedMonth={selectedMonth}
+                selectedQuarter={selectedQuarter}
+                selectedHalf={selectedHalf}
+                onPeriodTypeChange={(t) => setPeriodType(t)}
+                onYearChange={(y) => setSelectedYear(y)}
+                onMonthChange={(m) => setSelectedMonth(m)}
+                onQuarterChange={(q) => setSelectedQuarter(q)}
+                onHalfChange={(h) => setSelectedHalf(h)}
+              />
+            </div>
+
+            {/* Take a tour button */}
+            <TourButton />
+            <SampleDataBadge global />
 
             {/* Notification Bell Dropdown */}
-            <div style={{ position: 'relative', display: 'inline-block' }}>
+            <div data-tour="header-notifications" style={{ position: 'relative', display: 'inline-block' }}>
               <button 
                 onClick={() => setIsNotifDropdownOpen(!isNotifDropdownOpen)}
                 className="theme-toggle-btn"
@@ -645,7 +696,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                   border: '2px solid var(--card)',
                   pointerEvents: 'none',
                   zIndex: 10
-                }}>
+              }}
+          >
                   {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
                 </span>
               )}
@@ -691,7 +743,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 justifyContent: 'center',
                 fontSize: '12px',
                 fontWeight: 700
-              }}>
+              }}
+        >
                 {userInitials}
               </div>
               <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -711,7 +764,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                   padding: '6px',
                   borderRadius: '6px',
                   transition: 'color 0.15s ease'
-                }}
+          
+              }}
               >
                 <LogOut size={16} />
               </button>
@@ -720,6 +774,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         </header>
 
         {/* Body Content */}
+        <div key={dataRefreshKey} style={{ display: 'contents' }}>
         {activeTab === 'not-found' ? (
           <NotFoundPage
             embedded={true}
@@ -810,6 +865,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             onNavigateTab={(tab) => setActiveTab(tab)}
           />
         )}
+        </div>
       </div>
 
       {/* Logout Confirmation Modal */}
@@ -824,7 +880,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           justifyContent: 'center',
           zIndex: 100,
           padding: '16px'
-        }}>
+              }}
+  >
           <div style={{
             backgroundColor: 'var(--card)',
             borderRadius: 'var(--radius-card)',
@@ -835,7 +892,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             padding: '28px',
             textAlign: 'center',
             position: 'relative'
-          }}>
+              }}
+    >
             <div style={{
               width: '52px',
               height: '52px',
@@ -846,7 +904,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 16px'
-            }}>
+              }}
+      >
               <LogOut size={24} />
             </div>
             <h3 style={{ fontSize: '19px', fontWeight: 700, color: 'var(--primary)', marginBottom: '8px' }}>
@@ -883,7 +942,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                   cursor: 'pointer',
                   fontSize: '13.5px',
                   transition: 'opacity 0.15s ease'
-                }}
+          
+              }}
               >
                 Yes, Log Out
               </button>
@@ -926,7 +986,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             fontSize: '13.5px',
             animation: 'fadeIn 0.2s ease-out',
             border: '1px solid rgba(255, 255, 255, 0.15)'
-          }}
+    
+              }}
         >
           <span>Notification removed</span>
           <button
@@ -941,13 +1002,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               padding: '2px 6px',
               borderRadius: '4px',
               textDecoration: 'underline'
-            }}
+      
+              }}
           >
             Undo
           </button>
         </div>
       )}
-
-    </div>
+      </div>
+    </TourProvider>
   );
 };

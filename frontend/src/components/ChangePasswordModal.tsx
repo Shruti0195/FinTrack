@@ -121,6 +121,14 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       return;
     }
 
+    if (typeof document !== 'undefined' && document.body.classList.contains('tour-active-sample')) {
+      setFeedback({
+        type: 'error',
+        msg: 'Changing password is disabled during the guided tour.'
+      });
+      return;
+    }
+
     setUpdating(true);
     try {
       const res = await changeUserPassword({

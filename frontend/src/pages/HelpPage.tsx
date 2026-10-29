@@ -7,26 +7,57 @@ import {
   XCircle, 
   Inbox 
 } from 'lucide-react';
+import { GettingStartedChecklist } from '../components/GettingStartedChecklist';
+import { useTour } from '../tour';
+import { helpTourSteps } from '../tour/tourRegistry';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { 
   fetchSupportReports, 
   createSupportReport, 
   type SupportReportItem, 
   type ReportType 
 } from '../api/help';
-import { GettingStartedChecklist } from '../components/GettingStartedChecklist';
+
 
 interface HelpPageProps {
-  onNavigateTab: (tab: string) => void;
+  onNavigateTab?: (tab: string) => void;
   onOpenPrivacy?: () => void;
   onOpenTerms?: () => void;
 }
 
+
+const FAQ_ITEMS = [
+  {
+    q: 'How is my Financial Health Score calculated?',
+    a: 'Your score is calculated out of 100 points across four core factors: Savings Rate (35 pts for saving 30%+), Budget Adherence (30 pts for staying within limits), Expense Stability (20 pts for steady monthly spending), and Essential vs Lifestyle Mix (15 pts for keeping lifestyle expenses under 30%).'
+  },
+  {
+    q: 'Are goal contributions counted as expenses or savings?',
+    a: 'No. Goals are tracked separately. Money allocated toward a savings goal is not counted as an expense and does not change your monthly net savings figure.'
+  },
+  {
+    q: 'How do budget and goal alert notifications work?',
+    a: 'Each budget and goal has its own alert bell icon where you can set custom in-app and email alert triggers (e.g. at 80% and 100% of budget, or deadline and milestone reminders for goals). You can also pause all alerts at any time with the top pause switch.'
+  },
+  {
+    q: 'How do I export my data or download reports?',
+    a: 'On the Analytics page, click "Download report (PDF)" to get a complete financial summary report with charts for any selected period. You can also export filtered income and expense tables to CSV directly from their respective pages.'
+  }
+];
+
 export const HelpPage: React.FC<HelpPageProps> = ({
-  onNavigateTab,
+  onNavigateTab: _onNavigateTab,
   onOpenPrivacy,
   onOpenTerms
 }) => {
   // Support Form State
+  const { registerPageSteps, isTourActive } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('help', helpTourSteps);
+  }, [registerPageSteps]);
+
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [reportType, setReportType] = useState<ReportType>('Something is broken');
   const [reportTitle, setReportTitle] = useState('');
   const [reportDescription, setReportDescription] = useState('');
@@ -62,6 +93,10 @@ export const HelpPage: React.FC<HelpPageProps> = ({
   // Submit Support Report
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isTourActive || (typeof document !== 'undefined' && document.body.classList.contains('tour-active-sample'))) {
+      setSubmitErrorMessage('Sending reports is disabled during the guided tour.');
+      return;
+    }
     setSubmitSuccessMessage(null);
     setSubmitErrorMessage(null);
 
@@ -152,13 +187,84 @@ export const HelpPage: React.FC<HelpPageProps> = ({
         </p>
       </div>
 
+
+
+
+
       {/* 1. GETTING STARTED CHECKLIST */}
-      <GettingStartedChecklist onNavigateTab={onNavigateTab} />
+      <div data-tour="getting-started-checklist">
+        <GettingStartedChecklist onNavigateTab={_onNavigateTab || (() => {})} />
+      </div>
 
+      {/* 2. FREQUENTLY ASKED QUESTIONS */}
+      <section data-tour="help-faq" className="card-box" style={{
+        backgroundColor: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-card)',
+        padding: '24px 28px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+      }}>
+        <div style={{ marginBottom: '18px' }}>
+          <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)', margin: '0 0 4px' }}>
+            Frequently Asked Questions
+          </h2>
+          <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', margin: 0 }}>
+            Quick answers to common questions about managing your finances in FinTrack.
+          </p>
+        </div>
 
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {FAQ_ITEMS.map((item, idx) => {
+            const isOpen = openFaqIndex === idx;
+            return (
+              <div
+                key={idx}
+                style={{
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--card-subtle)',
+                  overflow: 'hidden'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '14px 16px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    color: 'var(--primary)',
+                    fontSize: '14px',
+                    fontWeight: 600
+                  }}
+                >
+                  <span>{item.q}</span>
+                  {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {isOpen && (
+                  <div style={{
+                    padding: '0 16px 14px',
+                    fontSize: '13.5px',
+                    color: 'var(--secondary-text)',
+                    lineHeight: 1.5
+                  }}>
+                    {item.a}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
-      {/* 2. REPORT A PROBLEM OR SUGGEST SOMETHING */}
-      <section className="card-box" style={{
+      {/* 3. REPORT A PROBLEM OR SUGGEST SOMETHING */}
+      <section data-tour="help-report-form" className="card-box" style={{
         backgroundColor: 'var(--card)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-card)',
@@ -399,7 +505,7 @@ export const HelpPage: React.FC<HelpPageProps> = ({
         </form>
 
         {/* "Your reports" List */}
-        <div style={{ marginTop: '36px', borderTop: '1px solid var(--border)', paddingTop: '24px' }}>
+        <div data-tour="help-reports-list" style={{ marginTop: '36px', borderTop: '1px solid var(--border)', paddingTop: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
               Your reports

@@ -42,6 +42,9 @@ import { GoalAlertSettingsModal, formatGoalAlertPreview, formatGoalCardBellSumma
 import { PauseAlertsModal } from './PauseAlertsModal';
 import { PeriodCapsule } from './PeriodCapsule';
 import { GoalsInfoTooltip } from './GoalsInfoTooltip';
+import { useTour } from '../tour';
+import { goalTourSteps } from '../tour/tourRegistry';
+import { SampleDataBadge } from '../tour/sampleData';
 
 const QUICK_MILESTONES = [25, 50, 75, 100];
 
@@ -120,6 +123,12 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   const [goals, setGoals] = useState<Goal[]>([]);
   const [summary, setSummary] = useState<GoalSummary | null>(null);
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'completed'>('all');
+
+  const { registerPageSteps, isTourActive } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('goals', goalTourSteps);
+  }, [registerPageSteps]);
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -270,6 +279,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
   // Alert pause handlers
   const handleResumeAlerts = async () => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showToast('Alert settings cannot be changed during the guided tour.', 'info');
+      return;
+    }
     try {
       const res = await resumeGoalAlerts();
       setIsAlertsPaused(res.is_paused);
@@ -282,6 +295,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   };
 
   const handleConfirmPause = async (duration: '1_day' | '1_week' | '1_month' | 'indefinite') => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showToast('Alert settings cannot be changed during the guided tour.', 'info');
+      return;
+    }
     try {
       const res = await pauseGoalAlerts(duration);
       setIsAlertsPaused(res.is_paused);
@@ -314,6 +331,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
   // Open Create Goal Modal
   const handleOpenCreateModal = async () => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showToast('Creating goals is disabled during the guided tour.', 'info');
+      return;
+    }
     setFormTitle('');
     setFormTargetAmount('');
     setFormTimeframeMode('months');
@@ -344,6 +365,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
   // Open Edit Goal Modal
   const handleOpenEditModal = (goal: Goal) => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showToast('Editing goals is disabled during the guided tour.', 'info');
+      return;
+    }
     setEditingGoal(goal);
     setFormTitle(goal.title);
     setFormTargetAmount(String(goal.target_amount));
@@ -368,6 +393,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
   const handleCreateGoalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setFormError('Actions that save are disabled during the guided tour.');
+      return;
+    }
 
     const targetAmt = parseFloat(formTargetAmount);
     if (!formTitle.trim()) {
@@ -470,6 +499,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
   // Open 2-Tap Quick Add Money Modal
   const handleOpenAddMoney = (goal: Goal) => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showToast('Adding money is disabled during the guided tour.', 'info');
+      return;
+    }
     if (goal.status === 'completed' || goal.percentage >= 100 || goal.remaining_amount <= 0) {
       showToast(`"${goal.title}" is already 100% achieved! 🎉 No further contributions needed.`, 'info');
       return;
@@ -526,6 +559,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
   // Open Edit Contribution Modal
   const handleOpenEditContrib = (goal: Goal, contrib: GoalContribution) => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showToast('Editing contributions is disabled during the guided tour.', 'info');
+      return;
+    }
     setEditingContrib({ goal, contrib });
     setEditContribAmount(String(contrib.amount));
     setEditContribNote(contrib.note || '');
@@ -586,6 +623,10 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
   // Extend Overdue Goal Deadline by 1 Month
   const handleExtendDeadline = async (goal: Goal) => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showToast('Extending deadlines is disabled during the guided tour.', 'info');
+      return;
+    }
     const today = new Date();
     const newDeadline = new Date(today.getTime() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
     try {
@@ -634,7 +675,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
       {/* 2. HEADER SECTION */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
+        <div data-tour="goals-header-title">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
             <div style={{
               width: '32px',
@@ -651,7 +692,8 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
             <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Financial Goals
             </h1>
-            <GoalsInfoTooltip size={18} />
+            <GoalsInfoTooltip size={18} dataTour="goals-info-note" />
+            <SampleDataBadge section="goals" />
           </div>
           <p style={{ fontSize: '14px', color: 'var(--secondary-text)', margin: 0 }}>
             Set meaningful targets, save step-by-step, and watch your progress grow.
@@ -662,6 +704,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
           <PeriodCapsule periodType={periodType} periodLabel={periodLabel} />
           {/* Pause Toggle Switch */}
           <div
+            data-tour="goals-pause-switch"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -732,6 +775,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
           <button
             onClick={handleOpenCreateModal}
+            data-tour="goals-create-btn"
             className="btn-primary"
             style={{
               display: 'flex',
@@ -931,6 +975,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
           </p>
           <button
             onClick={handleOpenCreateModal}
+            data-tour="goals-header"
             className="btn-primary"
             style={{ padding: '10px 22px', fontSize: '13.5px', margin: '0 auto' }}
           >
@@ -943,7 +988,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
           gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
           gap: '20px'
         }}>
-          {goals.map((goal) => {
+          {goals.map((goal, gIdx) => {
             const isCompleted = goal.status === 'completed' || goal.percentage >= 100;
             const isOverdue = goal.deadline && new Date(goal.deadline) < new Date() && !isCompleted;
             const goalColor = goal.color || '#10B981';
@@ -953,6 +998,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
               <div
                 key={goal.id}
                 className="card-box"
+                {...(gIdx === 0 ? { 'data-tour': 'goal-card' } : {})}
                 style={{
                   padding: '20px',
                   display: 'flex',
@@ -1113,6 +1159,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                   {/* Card-level Alert Summary Bell Button */}
                   <button
                     type="button"
+                    {...(gIdx === 0 ? { 'data-tour': 'goal-alert-bell' } : {})}
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedGoalForAlerts(goal);
@@ -1164,6 +1211,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                 <div style={{ display: 'flex', gap: '10px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
                   <button
                     onClick={() => handleOpenAddMoney(goal)}
+                    {...(gIdx === 0 ? { 'data-tour': 'goal-add-money-btn' } : {})}
                     disabled={isCompleted}
                     className="btn-primary"
                     style={{
@@ -1184,6 +1232,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                     className="btn-outline"
                     style={{ height: '36px', padding: '0 12px', fontSize: '12.5px' }}
                     title="View Goal Details & Contribution History"
+                    {...(gIdx === 0 ? { 'data-tour': 'goal-details-btn' } : {})}
                   >
                     Details
                   </button>

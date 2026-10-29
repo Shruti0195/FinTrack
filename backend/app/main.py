@@ -33,7 +33,8 @@ def ensure_columns():
                 ADD COLUMN IF NOT EXISTS budget_alerts_paused BOOLEAN NOT NULL DEFAULT FALSE,
                 ADD COLUMN IF NOT EXISTS budget_alerts_paused_until TIMESTAMPTZ,
                 ADD COLUMN IF NOT EXISTS goal_alerts_paused BOOLEAN NOT NULL DEFAULT FALSE,
-                ADD COLUMN IF NOT EXISTS goal_alerts_paused_until TIMESTAMPTZ;
+                ADD COLUMN IF NOT EXISTS goal_alerts_paused_until TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS tour_completed_version INTEGER NOT NULL DEFAULT 0;
             """))
             conn.execute(text("""
                 ALTER TABLE notifications 

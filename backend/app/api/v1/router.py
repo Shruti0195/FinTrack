@@ -10,6 +10,7 @@ from app.api.v1.endpoints.user import (
     notifications as user_notifications,
     analytics as user_analytics,
     help as user_help,
+    tour as user_tour,
 )
 from app.api.v1.endpoints.admin import overview as admin_overview, users as admin_users
 
@@ -34,6 +35,7 @@ user_router.include_router(user_budgets.router, prefix="/budgets", tags=["User -
 user_router.include_router(user_goals.router, prefix="/goals", tags=["User - Goals"])
 user_router.include_router(user_notifications.router, prefix="/notifications", tags=["User - Notifications"])
 user_router.include_router(user_help.router, prefix="/help", tags=["User - Help"])
+user_router.include_router(user_tour.router, prefix="/tour", tags=["User - Tour"])
 # user_router.include_router(analytics.router, prefix="/analytics", tags=["User - Analytics"])
 
 api_router.include_router(user_router)

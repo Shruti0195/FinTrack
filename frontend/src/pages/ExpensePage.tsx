@@ -28,6 +28,8 @@ import api from '../api/client';
 import { CustomSelect } from '../components/CustomSelect';
 import { PeriodCapsule } from '../components/PeriodCapsule';
 import type { PeriodType } from '../components/PeriodFilterDropdown';
+import { useTour } from '../tour';
+import { expenseTourSteps } from '../tour/tourRegistry';
 
 export interface ExpenseCategory {
   id: string;
@@ -138,6 +140,13 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
 
   const months = MONTHS_LIST;
   const activePeriodLabel = propPeriodLabel || (periodType === 'monthly' ? `${months[selectedMonth]?.label || ''} ${selectedYear}` : `Year ${selectedYear}`);
+
+  const { registerPageSteps, isTourActive } = useTour();
+
+  useEffect(() => {
+    registerPageSteps('expenses', expenseTourSteps);
+    registerPageSteps('transactions', expenseTourSteps);
+  }, [registerPageSteps]);
 
   // Data state
   const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
@@ -400,6 +409,10 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
 
   // Open Add Modal
   const handleOpenAdd = () => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showFeedback('Adding expenses is disabled during the guided tour.', 'error');
+      return;
+    }
     setEditingEntry(null);
     setFormAmount('');
     setFormCategoryId(categories[0]?.id || '');
@@ -412,6 +425,10 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
 
   // Open Edit Modal
   const handleOpenEdit = (entry: ExpenseEntry) => {
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      showFeedback('Editing expenses is disabled during the guided tour.', 'error');
+      return;
+    }
     setEditingEntry(entry);
     setFormAmount(String(entry.amount));
     setFormCategoryId(entry.category_id);
@@ -426,6 +443,10 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    if (isTourActive || document.body.classList.contains('tour-active-sample')) {
+      setFormError('Actions that save are disabled during the guided tour.');
+      return;
+    }
 
     const parsedAmount = parseFloat(formAmount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -653,7 +674,7 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
 
       {/* 2. HEADER TITLE & CALL TO ACTION */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
+        <div data-tour="expense-header">
           <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px', letterSpacing: '-0.02em' }}>
             Expenses & Transactions
           </h1>
@@ -666,7 +687,7 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
           <PeriodCapsule periodType={periodType} periodLabel={activePeriodLabel} />
 
           {/* Export Menu Dropdown (CSV / PDF) */}
-          <div style={{ position: 'relative' }} ref={exportMenuRef}>
+          <div style={{ position: 'relative' }} ref={exportMenuRef} data-tour="expense-export-btn">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               style={{
@@ -760,6 +781,7 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
 
           {/* Add Expense Button */}
           <button
+            data-tour="expense-add-btn"
             onClick={handleOpenAdd}
             className="btn-primary"
             style={{
@@ -780,7 +802,7 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
       </div>
 
       {/* 3. TOP KPI SUMMARY STATS CARDS */}
-      <div style={{
+      <div data-tour="expense-summary-cards" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: '18px',
@@ -900,7 +922,7 @@ export const ExpensePage: React.FC<ExpensePageProps> = ({
       </div>
 
       {/* 4. CLEAN SEARCH BAR TOOLBAR */}
-      <div className="card-box" style={{ padding: '16px 20px', marginBottom: '20px' }}>
+      <div className="card-box" data-tour="expense-toolbar" style={{ padding: '16px 20px', marginBottom: '20px' }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',

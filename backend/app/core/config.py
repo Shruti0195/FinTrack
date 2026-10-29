@@ -1,5 +1,9 @@
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ROOT_DIR = _BACKEND_DIR.parent
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "FinTrack"
@@ -11,7 +15,7 @@ class Settings(BaseSettings):
 
     # Gmail SMTP Settings
     SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
+    SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     EMAILS_FROM_EMAIL: str = "noreply@fintrack.com"
@@ -21,7 +25,11 @@ class Settings(BaseSettings):
     SUPPORT_EMAIL: str = "fintrack37@gmail.com"
 
     class Config:
-        env_file = ".env"
+        env_file = (
+            str(_BACKEND_DIR / ".env"),
+            str(_ROOT_DIR / ".env"),
+            ".env"
+        )
         extra = "ignore"
         case_sensitive = True
 
