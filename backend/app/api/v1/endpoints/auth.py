@@ -195,11 +195,41 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
         success=True
     )
 
+@router.post("/admin/login", response_model=Token)
+def admin_login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    Dedicated Administrator Login Endpoint.
+    Strictly restricted to users with role == 'ADMIN'.
+    """
+    email_clean = form_data.username.lower().strip()
+    user = db.query(User).filter(User.email == email_clean).first()
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect administrator credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if user.role != 'ADMIN':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. This portal is restricted to authorized administrators only.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This administrator account is currently disabled. Please contact system support.",
+        )
+
+    access_token = create_access_token(subject=str(user.id), token_version=getattr(user, 'token_version', 1) or 1)
+    return {"access_token": access_token, "token_type": "bearer", "role": user.role}
+
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
-    OAuth2 standard login endpoint used by both User and Admin.
-    Checks password, verification status, and active status.
+    Unified Login endpoint for both Users and Administrators.
+    Returns access_token and user role ('USER' or 'ADMIN') so frontend redirects accordingly.
     """
     email_clean = form_data.username.lower().strip()
     user = db.query(User).filter(User.email == email_clean).first()
@@ -210,18 +240,24 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check email verification / active status
-    if not user.is_verified or not user.is_active:
+    # Check email verification / active status (admins bypass verification check)
+    if user.role != 'ADMIN' and not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account is not active. Please verify your email via the link sent to your inbox before logging in.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is currently disabled. Please contact support.",
         )
 
     access_token = create_access_token(
         subject=str(user.id),
         token_version=getattr(user, 'token_version', 1) or 1
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "role": user.role}
 
 @router.get("/me", response_model=UserOut)
 def get_me(current_user: User = Depends(get_current_user)):

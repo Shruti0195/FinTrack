@@ -83,6 +83,94 @@ def ensure_columns():
                 CREATE INDEX IF NOT EXISTS ix_support_reports_status ON support_reports(status);
                 CREATE INDEX IF NOT EXISTS ix_support_reports_created_at ON support_reports(created_at);
 
+                CREATE SEQUENCE IF NOT EXISTS support_report_num_seq START 101;
+
+                ALTER TABLE support_reports
+                ADD COLUMN IF NOT EXISTS report_number INTEGER DEFAULT nextval('support_report_num_seq'),
+                ADD COLUMN IF NOT EXISTS closed_reason VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS admin_reply TEXT,
+                ADD COLUMN IF NOT EXISTS admin_reply_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_support_reports_report_num ON support_reports(report_number);
+
+                CREATE TABLE IF NOT EXISTS support_report_notes (
+                    id UUID PRIMARY KEY,
+                    report_id UUID NOT NULL REFERENCES support_reports(id) ON DELETE CASCADE,
+                    admin_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                    admin_name VARCHAR(150) NOT NULL DEFAULT 'Admin',
+                    note TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS ix_support_report_notes_report_id ON support_report_notes(report_id);
+
+                CREATE TABLE IF NOT EXISTS support_report_history (
+                    id UUID PRIMARY KEY,
+                    report_id UUID NOT NULL REFERENCES support_reports(id) ON DELETE CASCADE,
+                    actor_type VARCHAR(20) NOT NULL,
+                    actor_name VARCHAR(150) NOT NULL,
+                    event_type VARCHAR(50) NOT NULL,
+                    old_status VARCHAR(30),
+                    new_status VARCHAR(30),
+                    message TEXT,
+                    is_internal BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS ix_support_report_history_report_id ON support_report_history(report_id);
+
+                ALTER TABLE reported_issues
+                ADD COLUMN IF NOT EXISTS page VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS admin_note TEXT;
+
+                CREATE TABLE IF NOT EXISTS goal_icons (
+                    id UUID PRIMARY KEY,
+                    name VARCHAR(60) NOT NULL UNIQUE,
+                    icon_key VARCHAR(50) NOT NULL UNIQUE,
+                    is_default BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS goal_colors (
+                    id UUID PRIMARY KEY,
+                    name VARCHAR(60) NOT NULL UNIQUE,
+                    hex VARCHAR(10) NOT NULL UNIQUE,
+                    is_default BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                -- Seed default goal icons if empty
+                INSERT INTO goal_icons (id, name, icon_key, is_default)
+                SELECT gen_random_uuid(), val.name, val.icon_key, TRUE
+                FROM (VALUES 
+                    ('Target', 'target'),
+                    ('Phone', 'phone'),
+                    ('Travel', 'plane'),
+                    ('Emergency', 'shield'),
+                    ('Home', 'home'),
+                    ('Vehicle', 'car'),
+                    ('Gadget', 'laptop'),
+                    ('Gift', 'gift'),
+                    ('Dream', 'sparkles'),
+                    ('Personal', 'heart')
+                ) AS val(name, icon_key)
+                WHERE NOT EXISTS (SELECT 1 FROM goal_icons LIMIT 1);
+
+                -- Seed default goal colors if empty
+                INSERT INTO goal_colors (id, name, hex, is_default)
+                SELECT gen_random_uuid(), val.name, val.hex, TRUE
+                FROM (VALUES 
+                    ('Emerald Green', '#10B981'),
+                    ('Deep Navy', '#0F172A'),
+                    ('Royal Blue', '#3B82F6'),
+                    ('Violet', '#8B5CF6'),
+                    ('Rose', '#EC4899'),
+                    ('Amber', '#F59E0B')
+                ) AS val(name, hex)
+                WHERE NOT EXISTS (SELECT 1 FROM goal_colors LIMIT 1);
+
                 -- Migration: Copy page-level settings to individual cards for existing budgets
                 UPDATE budgets b
                 SET 

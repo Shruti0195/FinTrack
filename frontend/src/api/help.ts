@@ -16,13 +16,31 @@ export type ReportType = 'Something is broken' | 'I have a question' | 'I have a
 
 export interface SupportReportItem {
   id: string;
+  report_number: number;
   report_type: ReportType;
   title: string;
   description: string;
   page?: string | null;
-  status: string;
+  status: 'Open' | 'In progress' | 'Resolved' | 'Closed' | string;
+  closed_reason?: string | null;
+  admin_reply?: string | null;
+  admin_reply_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface UserReportHistoryItem {
+  id: string;
+  actor_name: string;
+  event_type: string;
+  old_status?: string | null;
+  new_status?: string | null;
+  message?: string | null;
+  created_at: string;
+}
+
+export interface UserReportDetail extends SupportReportItem {
+  history: UserReportHistoryItem[];
 }
 
 export interface SupportReportCreatePayload {
@@ -49,6 +67,11 @@ export const trackAnalyticsViewed = async (): Promise<{ message: string; success
 
 export const fetchSupportReports = async (): Promise<SupportReportItem[]> => {
   const response = await api.get<SupportReportItem[]>('/user/help/reports');
+  return response.data;
+};
+
+export const fetchSupportReportDetail = async (id: string): Promise<UserReportDetail> => {
+  const response = await api.get<UserReportDetail>(`/user/help/reports/${id}`);
   return response.data;
 };
 

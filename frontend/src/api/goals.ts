@@ -194,3 +194,30 @@ export const updateGoalCardAlerts = async (
   const res = await api.put<Goal>(`/user/goals/${goalId}/alerts`, data);
   return res.data;
 };
+
+
+// ========================
+// Dynamic Goal Options (Admin Configured Icons & Colors)
+// ========================
+
+export interface GoalIconOption {
+  id: string;
+  name: string;
+  icon_key: string;
+}
+
+export interface GoalColorOption {
+  id: string;
+  name: string;
+  hex: string;
+}
+
+export interface GoalOptionsResponse {
+  icons: GoalIconOption[];
+  colors: GoalColorOption[];
+}
+
+export const getGoalOptions = async (): Promise<GoalOptionsResponse> => {
+  const res = await api.get<GoalOptionsResponse>('/user/goals/options');
+  return res.data;
+};

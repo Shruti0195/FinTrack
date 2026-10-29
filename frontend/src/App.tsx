@@ -9,11 +9,35 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
 import { AuthModal } from './components/AuthModal';
+import { AdminLayout } from './components/admin/AdminLayout';
+import api from './api/client';
+
+interface UserProfile {
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+}
 
 function AppContent() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [userLoggedIn, setUserLoggedIn] = useState(() => !!localStorage.getItem('token'));
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (userLoggedIn) {
+      api.get<UserProfile>('/auth/me')
+        .then((res) => setCurrentUser(res.data))
+        .catch(() => {
+          localStorage.removeItem('token');
+          setUserLoggedIn(false);
+          setCurrentUser(null);
+        });
+    } else {
+      setCurrentUser(null);
+    }
+  }, [userLoggedIn]);
   
   const [pageRoute, setPageRoute] = useState<'home' | 'verify-email' | 'reset-password' | 'privacy' | 'terms' | 'not-found'>(() => {
     const path = window.location.pathname;
@@ -42,6 +66,7 @@ function AppContent() {
   useEffect(() => {
     const handleUnauthorized = () => {
       setUserLoggedIn(false);
+      setCurrentUser(null);
       setAuthMode('login');
       setAuthModalOpen(true);
     };
@@ -56,6 +81,9 @@ function AppContent() {
 
   const handleAuthSuccess = () => {
     setUserLoggedIn(true);
+    api.get<UserProfile>('/auth/me')
+      .then((res) => setCurrentUser(res.data))
+      .catch(() => {});
   };
 
   const handleLogout = () => {
@@ -66,6 +94,7 @@ function AppContent() {
       window.history.replaceState(null, '', window.location.pathname);
     }
     setUserLoggedIn(false);
+    setCurrentUser(null);
   };
 
   // If route does not exist, render NotFoundPage for both guests and authenticated users
@@ -109,6 +138,18 @@ function AppContent() {
           window.history.pushState(null, '', '/');
           setPageRoute('home');
         }}
+      />
+    );
+  }
+
+  // If user is authenticated as ADMIN, render AdminLayout
+  const isAdmin = (currentUser?.role || '').toUpperCase() === 'ADMIN';
+  if (userLoggedIn && isAdmin) {
+    return (
+      <AdminLayout
+        userName={currentUser?.name || 'Administrator'}
+        userEmail={currentUser?.email || ''}
+        onLogout={handleLogout}
       />
     );
   }

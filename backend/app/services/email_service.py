@@ -785,3 +785,113 @@ def send_password_changed_email(
     )
 
 
+
+
+def generate_support_report_update_email_html(
+    name: str,
+    report_title: str,
+    status: str,
+    reply: str = "",
+    help_url: str = f"{settings.FRONTEND_URL}/#help"
+) -> str:
+    status_lower = status.lower()
+    status_color = "#3B82F6" if status_lower == "open" else "#8B5CF6" if "progress" in status_lower else "#10B981" if status_lower == "resolved" else "#64748B"
+
+    reply_section = ""
+    if reply and reply.strip():
+        reply_section = f"""
+        <div style="background-color: #F8FAFC; border-left: 4px solid #10B981; padding: 14px 18px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+          <div style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: #10B981; margin-bottom: 6px; letter-spacing: 0.05em;">
+            Response from Support Team
+          </div>
+          <div style="font-size: 14px; color: #334155; line-height: 1.5; white-space: pre-wrap;">
+            {reply}
+          </div>
+        </div>
+        """
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Update on your report: {report_title}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1E293B;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding: 30px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 540px; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;">
+          <tr>
+            <td style="background-color: #0F172A; padding: 22px 28px;">
+              <span style="color: #10B981; font-weight: 700; font-size: 17px;">FinTrack</span>
+              <span style="color: #94A3B8; font-size: 13px; margin-left: 8px;">• Support &amp; Feedback</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px;">
+              <h2 style="margin: 0 0 14px; font-size: 20px; color: #0F172A;">Your report has been updated</h2>
+              <p style="margin: 0 0 14px; font-size: 14.5px; color: #334155;">Hi <b>{name}</b>,</p>
+              <p style="margin: 0 0 16px; font-size: 14.5px; color: #475569; line-height: 1.6;">
+                The FinTrack team has updated the status of your report <strong>"{report_title}"</strong>:
+              </p>
+              <div style="margin: 16px 0;">
+                <span style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; background-color: {status_color}1A; color: {status_color}; border: 1px solid {status_color}4D;">
+                  Status: {status}
+                </span>
+              </div>
+              {reply_section}
+              <p style="margin: 20px 0 24px; font-size: 14px; color: #475569;">
+                You can review the full status timeline and responses anytime on your Help page in FinTrack.
+              </p>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="{help_url}" target="_blank" style="display: inline-block; padding: 12px 24px; font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 8px; background-color: #10B981;">
+                  View Report in FinTrack &rarr;
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 16px 28px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #94A3B8;">&copy; 2026 FinTrack. Personal Finance Analytics.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
+def send_support_report_update_email(
+    email_to: str,
+    user_name: str,
+    report_title: str,
+    status: str,
+    reply: str = "",
+    help_url: str = f"{settings.FRONTEND_URL}/#help"
+) -> bool:
+    subject = f"Update on your report: {report_title}"
+    plain_text = (
+        f"Hi {user_name},\n\n"
+        f"Your report \"{report_title}\" was updated to status: {status}.\n"
+    )
+    if reply and reply.strip():
+        plain_text += f"\nMessage from FinTrack Team:\n{reply}\n"
+    plain_text += f"\nView your report anytime on your Help page: {help_url}\n"
+
+    html_content = generate_support_report_update_email_html(
+        name=user_name,
+        report_title=report_title,
+        status=status,
+        reply=reply,
+        help_url=help_url
+    )
+
+    return _send_smtp_email(
+        to_email=email_to,
+        subject=subject,
+        plain_text=plain_text,
+        html_content=html_content,
+        description="support report update email"
+    )
