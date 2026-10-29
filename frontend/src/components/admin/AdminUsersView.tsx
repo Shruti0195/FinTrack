@@ -79,7 +79,7 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ currentAdminEmai
 
         const res = await resendAdminUserVerification(user.id);
         setToastMessage({
-          type: 'success',
+          type: res.success ? 'success' : 'error',
           text: res.message || `Verification link sent to ${user.email}.`
         });
         if (res.action_link) {
@@ -90,7 +90,7 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ currentAdminEmai
       } else {
         const res = await sendAdminUserPasswordReset(user.id);
         setToastMessage({
-          type: 'success',
+          type: res.success ? 'success' : 'error',
           text: res.message || `Password reset link sent to ${user.email}.`
         });
         if (res.action_link) {

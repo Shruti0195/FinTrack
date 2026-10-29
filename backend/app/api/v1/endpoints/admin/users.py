@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, asc, desc
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.user import User, PasswordReset
 from app.api.deps import get_current_admin_user
 from app.core.security import create_email_verification_token
@@ -145,7 +146,6 @@ def toggle_user_status(
 @router.post("/{user_id}/resend-verification", response_model=UserSupportActionResponse)
 def admin_resend_verification(
     user_id: uuid.UUID,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin_user),
 ):
@@ -160,11 +160,16 @@ def admin_resend_verification(
 
     token = create_email_verification_token(user.id)
     verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-    background_tasks.add_task(send_verification_email, user.email, user.name, token)
+    email_sent = send_verification_email(user.email, user.name, token)
+
+    if email_sent:
+        message = f"A fresh verification email has been sent successfully to {user.email}."
+    else:
+        message = f"Could not deliver email via SMTP to {user.email}. You can copy the verification link below or directly activate the account."
 
     return UserSupportActionResponse(
-        message=f"A fresh verification link has been sent to {user.email}.",
-        success=True,
+        message=message,
+        success=email_sent,
         action_link=verification_url
     )
 
@@ -198,7 +203,6 @@ def admin_manual_verify_user(
 @router.post("/{user_id}/send-password-reset", response_model=UserSupportActionResponse)
 def admin_send_password_reset(
     user_id: uuid.UUID,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin_user),
 ):
@@ -229,11 +233,15 @@ def admin_send_password_reset(
     db.commit()
 
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
-    # Send reset email in background
-    background_tasks.add_task(send_password_reset_email, user.email, user.name, reset_token)
+    email_sent = send_password_reset_email(user.email, user.name, reset_token)
+
+    if email_sent:
+        message = f"Password reset instructions have been sent successfully to {user.email}."
+    else:
+        message = f"Could not deliver email via SMTP to {user.email}. You can copy the reset link below."
 
     return UserSupportActionResponse(
-        message=f"Password reset instructions have been sent to {user.email}.",
-        success=True,
+        message=message,
+        success=email_sent,
         action_link=reset_url
     )
