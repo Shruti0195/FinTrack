@@ -5,12 +5,12 @@ import {
   Send, 
   RefreshCw, 
   XCircle, 
-  Inbox 
+  Inbox,
+  Sparkles
 } from 'lucide-react';
 import { GettingStartedChecklist } from '../components/GettingStartedChecklist';
 import { useTour } from '../tour';
 import { helpTourSteps } from '../tour/tourRegistry';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { 
   fetchSupportReports, 
   createSupportReport, 
@@ -26,29 +26,10 @@ interface HelpPageProps {
 }
 
 
-const FAQ_ITEMS = [
-  {
-    q: 'How is my Financial Health Score calculated?',
-    a: 'Your score is calculated out of 100 points across four core factors: Savings Rate (35 pts for saving 30%+), Budget Adherence (30 pts for staying within limits), Expense Stability (20 pts for steady monthly spending), and Essential vs Lifestyle Mix (15 pts for keeping lifestyle expenses under 30%).'
-  },
-  {
-    q: 'Are goal contributions counted as expenses or savings?',
-    a: 'No. Goals are tracked separately. Money allocated toward a savings goal is not counted as an expense and does not change your monthly net savings figure.'
-  },
-  {
-    q: 'How do budget and goal alert notifications work?',
-    a: 'Each budget and goal has its own alert bell icon where you can set custom in-app and email alert triggers (e.g. at 80% and 100% of budget, or deadline and milestone reminders for goals). You can also pause all alerts at any time with the top pause switch.'
-  },
-  {
-    q: 'How do I export my data or download reports?',
-    a: 'On the Analytics page, click "Download report (PDF)" to get a complete financial summary report with charts for any selected period. You can also export filtered income and expense tables to CSV directly from their respective pages.'
-  }
-];
-
 export const HelpPage: React.FC<HelpPageProps> = ({
   onNavigateTab: _onNavigateTab,
-  onOpenPrivacy,
-  onOpenTerms
+  onOpenPrivacy: _onOpenPrivacy,
+  onOpenTerms: _onOpenTerms
 }) => {
   // Support Form State
   const { registerPageSteps, isTourActive } = useTour();
@@ -57,7 +38,6 @@ export const HelpPage: React.FC<HelpPageProps> = ({
     registerPageSteps('help', helpTourSteps);
   }, [registerPageSteps]);
 
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [reportType, setReportType] = useState<ReportType>('Something is broken');
   const [reportTitle, setReportTitle] = useState('');
   const [reportDescription, setReportDescription] = useState('');
@@ -150,7 +130,7 @@ export const HelpPage: React.FC<HelpPageProps> = ({
       padding: '32px 24px 64px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '36px'
+      gap: '24px'
     }}>
       {/* Page Header */}
       <div>
@@ -183,7 +163,7 @@ export const HelpPage: React.FC<HelpPageProps> = ({
           margin: 0,
           lineHeight: 1.5
         }}>
-          Get unstuck, explore frequently asked questions, or send us a report if something goes wrong.
+          Get unstuck, track your setup checklist, or send us a report if something goes wrong.
         </p>
       </div>
 
@@ -192,78 +172,22 @@ export const HelpPage: React.FC<HelpPageProps> = ({
 
 
       {/* 1. GETTING STARTED CHECKLIST */}
-      <div data-tour="getting-started-checklist">
-        <GettingStartedChecklist onNavigateTab={_onNavigateTab || (() => {})} />
-      </div>
-
-      {/* 2. FREQUENTLY ASKED QUESTIONS */}
-      <section data-tour="help-faq" className="card-box" style={{
-        backgroundColor: 'var(--card)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-card)',
-        padding: '24px 28px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-      }}>
-        <div style={{ marginBottom: '18px' }}>
-          <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)', margin: '0 0 4px' }}>
-            Frequently Asked Questions
-          </h2>
-          <p style={{ fontSize: '13.5px', color: 'var(--secondary-text)', margin: 0 }}>
-            Quick answers to common questions about managing your finances in FinTrack.
-          </p>
+      {/* AI Assistant Help Banner */}
+      <section className="card-box" style={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--light-accent)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Sparkles size={18} />
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {FAQ_ITEMS.map((item, idx) => {
-            const isOpen = openFaqIndex === idx;
-            return (
-              <div
-                key={idx}
-                style={{
-                  borderRadius: '8px',
-                  border: '1px solid var(--border)',
-                  backgroundColor: 'var(--card-subtle)',
-                  overflow: 'hidden'
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '14px 16px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    color: 'var(--primary)',
-                    fontSize: '14px',
-                    fontWeight: 600
-                  }}
-                >
-                  <span>{item.q}</span>
-                  {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-                {isOpen && (
-                  <div style={{
-                    padding: '0 16px 14px',
-                    fontSize: '13.5px',
-                    color: 'var(--secondary-text)',
-                    lineHeight: 1.5
-                  }}>
-                    {item.a}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div style={{ flex: 1 }}>
+          <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--primary)', margin: '0 0 4px' }}>Need quick answers? Try the FinTrack AI Assistant</h3>
+          <p style={{ fontSize: '12.5px', color: 'var(--secondary-text)', margin: 0 }}>Click &quot;Ask AI&quot; at the bottom right anytime to ask about your budgets, recent transactions, spending trends, or financial health score.</p>
         </div>
       </section>
 
-      {/* 3. REPORT A PROBLEM OR SUGGEST SOMETHING */}
+      <div data-tour="getting-started-checklist" style={{ display: 'contents' }}>
+        <GettingStartedChecklist onNavigateTab={_onNavigateTab || (() => {})} />
+      </div>
+
+      {/* 2. REPORT A PROBLEM OR SUGGEST SOMETHING */}
       <section data-tour="help-report-form" className="card-box" style={{
         backgroundColor: 'var(--card)',
         border: '1px solid var(--border)',
@@ -661,65 +585,7 @@ export const HelpPage: React.FC<HelpPageProps> = ({
         </div>
       </section>
 
-      {/* 4. ABOUT AND LEGAL (Small text at bottom) */}
-      <footer style={{
-        textAlign: 'center',
-        padding: '16px 0 0',
-        borderTop: '1px solid var(--border)',
-        fontSize: '12.5px',
-        color: 'var(--secondary-text)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px',
-        flexWrap: 'wrap'
-      }}>
-        <span>FinTrack v1.0.0</span>
-        <span>•</span>
-        <button
-          type="button"
-          onClick={() => {
-            if (onOpenPrivacy) {
-              onOpenPrivacy();
-            } else {
-              window.location.hash = '#privacy';
-            }
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            fontSize: '12.5px',
-            color: 'var(--accent)',
-            cursor: 'pointer',
-            textDecoration: 'underline'
-          }}
-        >
-          Privacy Policy
-        </button>
-        <span>•</span>
-        <button
-          type="button"
-          onClick={() => {
-            if (onOpenTerms) {
-              onOpenTerms();
-            } else {
-              window.location.hash = '#terms';
-            }
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            fontSize: '12.5px',
-            color: 'var(--accent)',
-            cursor: 'pointer',
-            textDecoration: 'underline'
-          }}
-        >
-          Terms of Service
-        </button>
-      </footer>
+
     </div>
   );
 };

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
     SUPPORT_EMAIL: str = "fintrack37@gmail.com"
 
+    # Gemini AI Assistant Settings
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    DAILY_ASSISTANT_LIMIT: int = 50
+
     class Config:
         env_file = (
             str(_BACKEND_DIR / ".env"),

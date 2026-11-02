@@ -509,9 +509,39 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
 
     # 3. EVALUATE MONTHLY REPORT NOTIFICATION
     if getattr(user, 'monthly_report_notifs', True):
-        m_name = calendar.month_name[current_month]
-        period_id = f"{current_year}-{current_month:02d}"
+        # When month changes (e.g. from Oct to Nov), the monthly summary report that is ready
+        # is for the completed previous month (Oct), not the current ongoing month (Nov).
+        prev_month = 12 if current_month == 1 else current_month - 1
+        prev_year = current_year - 1 if current_month == 1 else current_year
+        m_name = calendar.month_name[prev_month]
+        period_id = f"{prev_year}-{prev_month:02d}"
         alert_key = f"monthly_report:{period_id}"
+
+        # Self-healing: if an alert was erroneously created for the ongoing current month, migrate it
+        current_period_key = f"monthly_report:{current_year}-{current_month:02d}"
+        erroneous_rec = db.query(AlertRecord).filter(
+            AlertRecord.user_id == user.id,
+            AlertRecord.alert_key == current_period_key
+        ).first()
+        if erroneous_rec:
+            erroneous_rec.alert_key = alert_key
+            erroneous_rec.period_identifier = period_id
+            db.add(erroneous_rec)
+            current_m_name = calendar.month_name[current_month]
+            wrong_pattern = f"for {current_m_name} {current_year}"
+            correct_msg = f"Your financial summary report for {m_name} {prev_year} is ready to view."
+            for notif in db.query(Notification).filter(
+                Notification.user_id == user.id,
+                Notification.type == 'monthly_report'
+            ).all():
+                if wrong_pattern in notif.message:
+                    notif.message = correct_msg
+                    db.add(notif)
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
         existing_report = db.query(AlertRecord).filter(
             AlertRecord.user_id == user.id,
             AlertRecord.alert_key == alert_key
@@ -522,7 +552,7 @@ def _evaluate_and_generate_notifications_locked(db: Session, user: User) -> List
                 user_id=user.id,
                 type='monthly_report',
                 title=f"Monthly Financial Report Ready",
-                message=f"Your financial summary report for {m_name} {current_year} is ready to view.",
+                message=f"Your financial summary report for {m_name} {prev_year} is ready to view.",
                 target_tab='analytics',
                 is_read=False
             ))

@@ -53,6 +53,15 @@ export const dashboardTourSteps: TourStep[] = [
     fullTourOnly: true
   },
   {
+    id: 'dashboard-ai-assistant',
+    page: 'dashboard',
+    element: '[data-tour="ai-assistant-btn"]',
+    title: 'AI Financial Assistant',
+    description: 'Have questions about your money? Tap Ask AI anytime to get instant insights into your spending, budgets, and savings goals.',
+    side: 'top',
+    align: 'end'
+  },
+  {
     id: 'dashboard-kpis',
     page: 'dashboard',
     element: '[data-tour="dashboard-kpis"]',
@@ -463,15 +472,6 @@ export const helpTourSteps: TourStep[] = [
     side: 'bottom',
     align: 'start',
     optional: true
-  },
-  {
-    id: 'help-faq',
-    page: 'help',
-    element: '[data-tour="help-faq"]',
-    title: 'Frequently Asked Questions',
-    description: 'Browse quick answers about health scores, budget alerts, goal tracking, and report exports.',
-    side: 'bottom',
-    align: 'start'
   },
   {
     id: 'help-report-form',

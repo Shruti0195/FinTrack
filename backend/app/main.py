@@ -192,6 +192,15 @@ def ensure_columns():
                     custom_alert_email = COALESCE(g.custom_alert_email, u.goal_alert_email, TRUE)
                 FROM users u
                 WHERE g.user_id = u.id AND (g.has_custom_alerts IS FALSE OR g.custom_milestone_thresholds IS NULL);
+
+                -- Migration: Fix monthly report notifications created with current month instead of previous completed month
+                UPDATE notifications
+                SET message = REPLACE(message, 'for November 2026', 'for October 2026')
+                WHERE type = 'monthly_report' AND message LIKE '%for November 2026%';
+
+                UPDATE alert_records
+                SET alert_key = 'monthly_report:2026-10', period_identifier = '2026-10'
+                WHERE alert_type = 'monthly_report' AND alert_key = 'monthly_report:2026-11';
             """))
             conn.commit()
     except Exception as e:

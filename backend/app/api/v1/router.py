@@ -12,6 +12,7 @@ from app.api.v1.endpoints.user import (
     help as user_help,
     tour as user_tour,
     issues as user_issues,
+    assistant as user_assistant,
 )
 from app.api.v1.endpoints.admin import (
     overview as admin_overview,
@@ -44,6 +45,7 @@ user_router.include_router(user_notifications.router, prefix="/notifications", t
 user_router.include_router(user_help.router, prefix="/help", tags=["User - Help"])
 user_router.include_router(user_issues.router, prefix="/issues", tags=["User - Issues"])
 user_router.include_router(user_tour.router, prefix="/tour", tags=["User - Tour"])
+user_router.include_router(user_assistant.router, prefix="/assistant", tags=["User - AI Assistant"])
 
 api_router.include_router(user_router)
 

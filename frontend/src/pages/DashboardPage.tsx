@@ -41,6 +41,8 @@ import { PrivacyPolicyPage } from './PrivacyPolicyPage';
 import { TermsPage } from './TermsPage';
 import { TourProvider, TourButton } from '../tour';
 import { SampleDataBadge } from '../tour/sampleData';
+import { AssistantChatWidget } from '../components/chat/AssistantChatWidget';
+import { AppFooter } from '../components/AppFooter';
 
 interface DashboardPageProps {
   onLogout: () => void;
@@ -866,6 +868,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           />
         )}
         </div>
+
+        {/* App Footer */}
+        <AppFooter onNavigateTab={setActiveTab} />
       </div>
 
       {/* Logout Confirmation Modal */}
@@ -1009,6 +1014,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           </button>
         </div>
       )}
+
+      {/* Floating Read-Only AI Assistant Drawer */}
+      <AssistantChatWidget onNavigateTab={setActiveTab} />
       </div>
     </TourProvider>
   );

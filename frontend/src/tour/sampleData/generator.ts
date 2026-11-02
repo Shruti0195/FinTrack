@@ -60,6 +60,10 @@ export function resolveDateOffset(offsetStr: string, refDate: Date = new Date())
   if (daysAgoMatch) {
     const days = parseInt(daysAgoMatch[1], 10);
     target.setDate(target.getDate() - days);
+    // Ensure relative day offsets for Month 0 transactions stay within the current month
+    if (target.getMonth() !== refDate.getMonth()) {
+      target.setFullYear(refDate.getFullYear(), refDate.getMonth(), 1);
+    }
     return target.toISOString().split('T')[0];
   }
 

@@ -10,6 +10,7 @@ import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
 import { AuthModal } from './components/AuthModal';
 import { AdminLayout } from './components/admin/AdminLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import api from './api/client';
 
 interface UserProfile {
@@ -65,6 +66,7 @@ function AppContent() {
 
   useEffect(() => {
     const handleUnauthorized = () => {
+      sessionStorage.removeItem('fintrack_assistant_messages');
       setUserLoggedIn(false);
       setCurrentUser(null);
       setAuthMode('login');
@@ -90,6 +92,7 @@ function AppContent() {
     localStorage.removeItem('token');
     localStorage.removeItem('fintrack_active_tab');
     localStorage.removeItem('fintrack_tour_completed');
+    sessionStorage.removeItem('fintrack_assistant_messages');
     if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname);
     }
@@ -211,7 +214,9 @@ function AppContent() {
 export function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }
